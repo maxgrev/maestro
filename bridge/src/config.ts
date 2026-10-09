@@ -9,10 +9,10 @@ export const configSchema = z.object({
   port: z.number().int().min(1024).max(65535).default(4211),
   localPort: z.number().int().min(1024).max(65535).default(4210),
   herdr: z.object({ binary: z.string(), session: z.string().regex(/^[a-zA-Z0-9_-]+$/), configPath: z.string().optional() }),
-  projects: z.array(z.object({ id: z.string().regex(/^[a-z0-9_-]+$/), name: z.string().min(1).max(60), path: z.string().refine(s => s.startsWith('/')) })).default([]),
+  projects: z.array(z.object({ id: z.string().regex(/^[a-z0-9_-]+$/), name: z.string().min(1).max(60), path: z.string().refine(s => s.startsWith('/')), trusted: z.boolean().optional() })).default([]),
   agents: z.array(z.enum(['codex', 'claude', 'pi'])).default(['codex', 'claude', 'pi']),
   codexBinary: z.string().optional(),
-  speech: z.object({ whisper: z.string(), model: z.string(), ffmpeg: z.string().default('ffmpeg'), voice: z.string().default('Samantha') }),
+  speech: z.object({ whisper: z.string(), model: z.string(), ffmpeg: z.string().default('ffmpeg'), lame: z.string().optional(), voice: z.string().default('Samantha') }),
   grok: z.object({ name: z.string().min(1).max(60).default('Grok Bot'), webhook: httpsUrl, key: z.string().min(1), replyKey: z.string().min(32) }).optional(),
 }).strict();
 export type Config = z.infer<typeof configSchema>;

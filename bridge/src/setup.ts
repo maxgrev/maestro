@@ -28,5 +28,5 @@ if (!existsSync(resolve(localDir, 'config.json'))) {
   };
   writeFileSync(resolve(localDir, 'config.json'), JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
 }
-if (!existsSync(resolve(localDir, 'device.json'))) writeFileSync(resolve(localDir, 'device.json'), JSON.stringify({ url: `https://${ips[0] ?? '127.0.0.1'}:4211` }, null, 2) + '\n', { mode: 0o600 });
+if (!existsSync(resolve(localDir, 'device.json'))) writeFileSync(resolve(localDir, 'device.json'), JSON.stringify({ url: `https://${host.endsWith('.local') ? host : ips[0] ?? '127.0.0.1'}:4211` }, null, 2) + '\n', { mode: 0o600 });
 console.log(`Saved private configuration in ${localDir}. Existing configuration was preserved.`);

@@ -10,3 +10,4 @@ cd firmware/build/sdk/esp32
 idf.py -B build-maestro -DIDF_TARGET=esp32s3 \
   -DSDKCONFIG=build-maestro/sdkconfig \
   '-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;devices/sdkconfig.muse;devices/sdkconfig.muse-m5stack-stopwatch;sdkconfig.maestro' build
+python "$MAESTRO_ROOT/scripts/firmware-manifest.py"

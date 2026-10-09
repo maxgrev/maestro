@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Set up Maestro</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/setup.css">
+</head>
+<body>
+  <header><a class="brand" href="/">Maestro</a><a href="/">Conversations <span aria-hidden="true">↗</span></a></header>
+  <main class="setup-layout">
+    <aside class="setup-intro">
+      <p class="overline">M5Stack StopWatch</p><h1>Set up your StopWatch.</h1>
+      <p>Connect your StopWatch, join Wi-Fi, and choose who you want to talk to.</p>
+      <div class="control-guide" aria-label="StopWatch controls">
+        <div class="guide-face"><span class="guide-agent">Your agents ▾</span><div class="companion codex" aria-hidden="true"><i></i><i></i><b></b></div><span>Hold yellow to talk</span></div>
+        <div class="key blue"></div><div class="key yellow"></div>
+      </div>
+      <dl class="controls"><div><dt><span class="key-swatch yellow"></span>Yellow</dt><dd>Hold to talk. Choose an agent in the list.</dd></div><div><dt><span class="key-swatch blue"></span>Blue</dt><dd>Open agents. Press again for the next one. Hold for settings.</dd></div><div><dt>Touch</dt><dd>Tap an agent to choose it. Swipe to settings.</dd></div></dl>
+    </aside>
+    <section class="setup-workspace" aria-label="Guided setup">
+      <nav class="setup-steps" aria-label="Setup steps"><button data-step="device" aria-current="step">Device</button><button data-step="wifi">Wi-Fi</button><button data-step="agents">Agents</button><button data-step="ready">Try it</button></nav>
+      <div id="setup-message" class="setup-message" role="status" aria-live="polite"></div>
+      <div id="setup-error" class="error" role="alert"></div>
+      <section data-panel="device">
+        <h2>Connect your StopWatch</h2><p>Plug it into your Mac with a USB data cable. Keep it connected until setup finishes.</p>
+        <label for="port">USB device</label><div class="field-row"><select id="port"><option value="">Looking for a device…</option></select><button id="scan" class="secondary">Refresh</button></div>
+        <button id="inspect">Connect device</button><p id="device-state" class="check-result"></p>
+        <div id="install-area" hidden><h3>Install Maestro</h3><p>Maestro saves a recovery copy first. Installation keeps your saved Wi-Fi and Muse pairing.</p><label class="checkbox"><input id="confirm-model" type="checkbox"> This USB device is an M5Stack StopWatch.</label><button id="install" class="secondary">Install on StopWatch</button></div>
+        <div class="step-footer"><button id="device-next" disabled>Continue to Wi-Fi →</button></div>
+      </section>
+      <section data-panel="wifi" hidden>
+        <h2>Join your Wi-Fi</h2><p>Use a 2.4 GHz network that your Mac can also reach.</p>
+        <p id="wifi-state" class="check-result"></p><button id="keep-wifi" class="secondary" hidden>Use this network</button>
+        <form id="wifi-form"><label for="ssid">Wi-Fi name</label><input id="ssid" required maxlength="32" autocomplete="off"><label for="wifi-password">Wi-Fi password</label><input id="wifi-password" type="password" maxlength="64" autocomplete="off"><p class="field-help">Leave the password blank for an open network.</p><button>Connect Wi-Fi</button></form>
+      </section>
+      <section data-panel="agents" hidden>
+        <h2>Bring your agents</h2><p>Connect any you use. You can add more later.</p>
+        <details class="agent-setup" open><summary><strong>Muse</strong><span id="muse-state">Checking…</span></summary><p>Muse connects through its phone app. Your existing device pairing stays in place.</p><form id="muse-form"><label for="muse-token">Muse SDK token</label><input id="muse-token" type="password" placeholder="mgst_…" autocomplete="off" required><p class="field-help"><a href="https://gadgets.muse.ai/" target="_blank" rel="noreferrer">Get a token from Muse ↗</a></p><button class="secondary">Save token</button></form><p>In Muse on your phone: enable Developer mode, open Devices, then add <strong id="muse-device">your StopWatch</strong>. Confirm on the yellow button when asked.</p><button id="check-pair" class="text-button">Check pairing</button></details>
+        <details class="agent-setup"><summary><strong>Grok Bot</strong><span id="grok-state">Checking…</span></summary><p>Use a Grok Bot routine with a webhook. Maestro sends your message to that routine and receives its reply through your Mac.</p><p><a href="/grok-setup.html" target="_blank">Open the routine guide ↗</a></p><form id="grok-form"><label for="grok-url">Webhook URL</label><input id="grok-url" type="url" required autocomplete="off" placeholder="https://…"><label for="grok-key">Webhook key</label><input id="grok-key" type="password" required autocomplete="off"><button class="secondary">Save Grok Bot</button></form></details>
+        <details class="agent-setup">
+          <summary><strong>Codex, Claude Code &amp; Pi</strong><span id="coding-state">Checking…</span></summary>
+          <p>Maestro uses Herdr to open new sessions and return to sessions it manages. Install the agents you want here, then sign in with their provider.</p>
+          <ul id="coding-agents" class="plain-list"></ul>
+          <div id="agent-progress" hidden><p id="agent-message" role="status"></p><a id="agent-login" target="_blank" rel="noreferrer" hidden>Open sign-in ↗</a><p id="agent-code"></p><button id="agent-cancel" class="secondary">Cancel</button></div>
+          <details><summary>Use an API key with Pi</summary><p>Pi can also use its saved account. This form saves a key in Pi’s private account file. Provider API usage may incur charges.</p><form id="pi-form"><label for="pi-provider">Provider</label><select id="pi-provider"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select><label for="pi-key">API key</label><input id="pi-key" type="password" required autocomplete="off"><button class="secondary">Save Pi key</button></form></details>
+          <form id="project-form">
+            <label for="project-name">Project name</label><input id="project-name" required maxlength="60">
+            <label for="project-path">Project folder</label><div class="field-row"><input id="project-path" required placeholder="/Users/you/Projects/my-project"><button id="choose-folder" type="button" class="secondary" hidden>Choose…</button></div>
+            <label class="checkbox"><input id="project-trusted" type="checkbox">I trust this folder for Codex.</label>
+            <p class="field-help">Codex can read, edit, and run files here under its usual permission settings. Folder settings can run code on startup. Trust only folders you know.</p>
+            <button class="secondary">Save project</button>
+          </form>
+          <p class="field-help">Existing chats outside Maestro’s Herdr session stay in their own apps. Claude Code and Pi report completion here; open their app for the full reply.</p>
+        </details>
+        <div class="step-footer"><button id="sync-device">Save to StopWatch →</button><p class="field-help">Saves the Mac connection and Muse token, then restarts your device.</p></div>
+      </section>
+      <section data-panel="ready" hidden>
+        <h2>Meet your agents</h2><p id="ready-description">Check the device connection, then press blue to see your agents.</p><div id="ready-checks" class="ready-checks"></div><button id="verify">Check connection</button><button id="open-agents" class="secondary" disabled>Show agents on StopWatch</button>
+        <p class="try-prompt">Choose an agent with yellow. Hold yellow and say “Hello.” Release to send.</p><p>Keep Maestro open on your Mac for Grok Bot, coding agents, and spoken replies. Muse also needs its own account connection.</p><a class="button-link" href="/">Open conversations →</a>
+      </section>
+    </section>
+  </main>
+  <footer><span>Your Mac handles speech. Account keys stay in private local storage.</span></footer>
+  <script type="module" src="/setup.js"></script>
+</body></html>

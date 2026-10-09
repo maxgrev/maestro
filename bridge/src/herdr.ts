@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
-import { accessSync, constants } from 'node:fs';
-import { delimiter, dirname, join } from 'node:path';
+import { dirname, delimiter } from 'node:path';
 import { readCodexReply } from './codex-reply.js';
 import type { Config } from './config.js';
 import { UserError, type Target } from './types.js';
+import { agentBinary, agentReadiness } from './agent-setup.js';
 const exec = promisify(execFile);
 
 interface Agent {
@@ -40,20 +40,21 @@ export class Herdr {
     const names: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', pi: 'Pi' };
     const terminalTitle = a.terminal_title_stripped?.split(' | ')[0];
     const title = terminalTitle && /[\p{L}\p{N}]/u.test(terminalTitle) ? terminalTitle : this.config.projects.find(p => p.path === a.cwd)?.name || 'Conversation';
-    const name = a.name?.startsWith('m-') ? `${names[a.agent ?? ''] ?? a.agent} · ${title}` : a.name || a.title || a.agent || 'Agent';
+    const name = a.name?.startsWith('m-') ? `${names[a.agent ?? ''] ?? a.agent} / ${title}` : a.name || a.title || a.agent || 'Agent';
     return { id: `herdr:${a.pane_id}:${identity(a)}`, name, provider: 'herdr', detail: a.cwd || '', status: a.agent_status,
-      available: ['idle', 'done'].includes(a.agent_status), pane: a.pane_id, identity: identity(a) };
+      available: ['idle', 'done'].includes(a.agent_status), pane: a.pane_id, identity: identity(a),
+      character: ['codex', 'claude', 'pi'].includes(a.agent ?? '') ? a.agent as Target['character'] : undefined };
   }
   async targets(): Promise<Target[]> {
     const result = await this.call(['agent', 'list']);
     if (!Array.isArray(result.agents)) throw new Error('Herdr agent list has an unsupported shape.');
     const existing = result.agents.filter(a => a.agent).map(a => this.target(a));
-    const installed = (kind: string) => [dirname(this.config.herdr.binary), ...(process.env.PATH ?? '').split(delimiter)]
-      .some(dir => { try { accessSync(join(dir, kind), constants.X_OK); return true; } catch { return false; } });
+    const ready = await Promise.all(this.config.agents.map(agentReadiness));
     const names = { codex: 'Codex', claude: 'Claude Code', pi: 'Pi' };
     const fresh: Target[] = this.config.projects.flatMap(p => this.config.agents.map(kind => ({
       id: `new:${kind}:${p.id}`, name: `New ${names[kind]}`, provider: 'herdr', detail: p.name,
-      status: installed(kind) ? 'new' : 'Install CLI', available: installed(kind), kind, project: p.id,
+      status: !ready.find(a=>a.kind===kind)?.installed ? 'Install in Maestro' : !ready.find(a=>a.kind===kind)?.signedIn ? 'Sign in on Mac' : kind==='codex'&&!p.trusted ? 'Choose project in Maestro' : 'new',
+      available: ready.some(a=>a.kind===kind&&a.installed&&a.signedIn) && (kind!=='codex'||p.trusted===true), kind, project: p.id, character: kind,
     })));
     return [...existing, ...fresh];
   }
@@ -61,10 +62,19 @@ export class Herdr {
     if (target.kind) {
       const project = this.config.projects.find(p => p.id === target.project);
       if (!project || !this.config.agents.includes(target.kind as 'codex')) throw new UserError('Unknown saved project or agent.');
-      const created = await this.call(['workspace', 'create', '--cwd', project.path, '--label', `Maestro ${target.kind}`, '--no-focus']);
+      if (target.kind === 'codex' && !project.trusted) throw new UserError('Choose and trust a project folder in Maestro setup first.');
+      // A running Herdr server may predate app-installed agents. Give each new
+      // pane the current app PATH without restarting anyone's existing session.
+      const binary = agentBinary(target.kind as 'codex' | 'claude' | 'pi');
+      const path = [binary ? dirname(binary) : '', process.env.PATH ?? ''].filter(Boolean).join(delimiter);
+      const created = await this.call(['workspace', 'create', '--cwd', project.path, '--label', `Maestro ${target.kind}`, '--env', `PATH=${path}`, '--no-focus']);
       if (!created.root_pane?.pane_id) throw new Error('Herdr did not return the new pane.');
       // App-bundled Codex can differ from the global daemon. Keep this session self-contained.
-      const args = target.kind === 'codex' ? ['--', '--no-daemon'] : [];
+      // The user explicitly trusts this saved folder in setup. This scopes the
+      // provider's folder trust to that path; tool approval rules stay intact.
+      // Use a TOML inline table: Codex's -c dotted-key parser splits dots inside
+      // quoted paths and retains their quotes (upstream issue #34261).
+      const args = target.kind === 'codex' ? ['--', '--no-daemon', '--config', `projects={${JSON.stringify(project.path)}={trust_level="trusted"}}`] : [];
       const started = await this.call(['agent', 'start', `m-${requestId.slice(0, 12)}`, '--kind', target.kind, '--pane', created.root_pane.pane_id, '--timeout', '30000', ...args], 35_000);
       if (!started.agent) throw new Error('Herdr did not confirm the new agent.');
       return this.target(started.agent);
@@ -88,8 +98,9 @@ export class Herdr {
     const read: Result = await this.call(['agent', 'read', target.pane!, '--source', 'recent-unwrapped', '--lines', '100']).catch(() => ({ text: '' }));
     // Terminal output is displayed verbatim, not misrepresented as a parsed final answer.
     const output = read.text ?? read.read?.text ?? '';
-    const clean = !blocked && result.agent.agent === 'codex' && this.config.codexBinary && result.agent.cwd
-      ? await readCodexReply(this.config.codexBinary, result.agent.cwd, text, started) : undefined;
+    const codex = this.config.codexBinary ?? agentBinary('codex');
+    const clean = !blocked && result.agent.agent === 'codex' && codex && result.agent.cwd
+      ? await readCodexReply(codex, result.agent.cwd, text, started) : undefined;
     return { state: blocked ? 'needs_attention' : 'done', output, target: this.target(result.agent),
       reply: blocked ? `${target.name} needs your attention. Open the agent on your Mac.` : clean ?? `${target.name} is ready. Its latest terminal output is available in Maestro.` };
   }

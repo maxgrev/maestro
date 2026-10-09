@@ -16,6 +16,20 @@ export function wav(pcm: Buffer): Buffer {
   return Buffer.concat([h, pcm]);
 }
 export interface SpeechEngine { transcribe(pcm: Buffer): Promise<string>; speak(text: string, format: 'pcm' | 'mp3'): Promise<Buffer> }
+export function pcmFromWav(bytes: Buffer): Buffer {
+  if (bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WAVE') throw new Error('Expected WAV speech.');
+  let format = false;
+  for (let offset = 12; offset + 8 <= bytes.length;) {
+    const size = bytes.readUInt32LE(offset + 4), data = offset + 8;
+    if (data + size > bytes.length) throw new Error('Incomplete WAV speech.');
+    const id = bytes.toString('ascii', offset, offset + 4);
+    if (id === 'fmt ') format = size >= 16 && bytes.readUInt16LE(data) === 1 && bytes.readUInt16LE(data + 2) === 1
+      && bytes.readUInt32LE(data + 4) === 16000 && bytes.readUInt16LE(data + 14) === 16;
+    if (id === 'data' && format && size % 2 === 0) return bytes.subarray(data, data + size);
+    offset = data + size + (size % 2);
+  }
+  throw new Error('Expected 16 kHz mono PCM16 speech.');
+}
 export class Speech implements SpeechEngine {
   private active = false;
   constructor(private config: Config['speech']) {}
@@ -36,7 +50,7 @@ export class Speech implements SpeechEngine {
         return text;
       } catch (e) {
         if (e instanceof UserError) throw e;
-        throw new Error('Transcription is unavailable. Run npm run doctor.');
+        throw new Error('Transcription is unavailable. Check the Maestro app on your Mac.');
       } finally { await rm(dir, { recursive: true, force: true }); }
     });
   }
@@ -45,6 +59,16 @@ export class Speech implements SpeechEngine {
       const dir = await mkdtemp(join(tmpdir(), 'maestro-tts-'));
       try {
         await writeFile(join(dir, 'reply.txt'), text.slice(0, 1800), { mode: 0o600 });
+        if (this.config.lame) {
+          await exec('/usr/bin/say', ['-v', this.config.voice, '-f', join(dir, 'reply.txt'), '-o', join(dir, 'reply.wav'), '--file-format=WAVE', '--data-format=LEI16@16000'], { timeout: 60_000 });
+          const pcm = pcmFromWav(await readFile(join(dir, 'reply.wav')));
+          if (pcm.length < 128) throw new Error('Speech engine returned no audio.');
+          if (format === 'pcm') return pcm;
+          await exec(this.config.lame, ['--quiet', '-b', '48', '-m', 'm', join(dir, 'reply.wav'), join(dir, 'reply.mp3')], { timeout: 30_000 });
+          const mp3 = await readFile(join(dir, 'reply.mp3'));
+          if (mp3.length < 128) throw new Error('Speech encoder returned no audio.');
+          return mp3;
+        }
         await exec('/usr/bin/say', ['-v', this.config.voice, '-f', join(dir, 'reply.txt'), '-o', join(dir, 'reply.aiff')], { timeout: 60_000 });
         const output = join(dir, `reply.${format}`);
         await exec(this.config.ffmpeg, ['-nostdin', '-loglevel', 'error', '-i', join(dir, 'reply.aiff'), '-ac', '1', '-ar', '16000', ...(format === 'pcm' ? ['-f', 's16le'] : ['-codec:a', 'libmp3lame', '-b:a', '48k']), output], { timeout: 30_000 });

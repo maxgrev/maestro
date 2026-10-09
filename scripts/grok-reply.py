@@ -32,7 +32,7 @@ if not text or len(text) > 16000:
     sys.exit("Reply must contain 1–16000 characters.")
 if args.local:
     # Fixed destination and config path: no credential or URL is passed through Bot chat.
-    config_file = Path(__file__).resolve().parent.parent / ".local/config.json"
+    config_file = Path(os.environ.get("MAESTRO_DATA", Path(__file__).resolve().parent.parent / ".local")) / "config.json"
     try:
         config = json.loads(config_file.read_text())
         port = config["localPort"]

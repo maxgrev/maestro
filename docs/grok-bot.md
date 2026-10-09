@@ -2,6 +2,8 @@
 
 Maestro uses the documented [Grok Bot routine webhook](https://cursor.com/help/grok-bot/routines). Open the Bot's details, then its routine: the Webhook section contains the POST URL and bearer key. A successful HTTP response means the routine started; the helper returns its answer.
 
+In the Mac app, open **Set up → Agents → Grok Bot**. The routine guide supplies a helper command for that installation; copy its instructions into your Bot's routine, then save the webhook URL and key in Maestro. The app creates the separate reply key. No terminal or config-file edit is needed. The commands below document the existing development setup and advanced options.
+
 On this Mac, the **Maestro voice remote** routine is configured on the main Grok Bot. Its execution policy already permits local commands, with Auto-review enabled. Replies return through localhost without a public tunnel or copying callback secrets to the cloud. A live request, a follow-up after restarting the bridge, and a clarification marked needs-attention all passed on October 9, 2026. The StopWatch also fetched Grok Bot in its agent list over Wi-Fi.
 
 Webhook runs start with fresh context. Maestro sends recent exchanges from its existing SQLite receipts in a `history` array, oldest first, with `request_id`, `message`, `reply`, and `needs_attention`. It includes only completed replies from this target: at most 12 exchanges and 24,000 text characters. The routine uses this as background, never as tasks to execute again. Grok can use its own memory tools for saved preferences; Maestro does not import the main Bot's full chat transcript.
@@ -24,7 +26,7 @@ The local routine instruction is in `.local/grok-setup/routine.txt`. It binds th
 
 **Mac configuration**
 
-This Mac is already configured. For another installation, add `grok` to `.local/config.json`:
+This Mac is already configured. The app saves these fields for you. For a manual development installation, add `grok` to `.local/config.json`:
 
 ```json
 {

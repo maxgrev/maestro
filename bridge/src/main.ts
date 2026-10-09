@@ -6,6 +6,7 @@ import { Speech } from './speech.js';
 import { Herdr } from './herdr.js';
 import { Service } from './service.js';
 import { buildServer } from './server.js';
+import { Onboarding } from './onboarding.js';
 
 mkdirSync(localDir, { recursive: true, mode: 0o700 });
 chmodSync(localDir, 0o700);
@@ -14,7 +15,7 @@ const config = readConfig();
 // the single-instance guard; recover the database only after that bind succeeds.
 const store = new Store(resolve(localDir, 'maestro.sqlite'));
 const service = new Service(config, store, new Herdr(config), new Speech(config.speech));
-const local = buildServer(service, { local: true });
+const local = buildServer(service, { local: true, onboarding: new Onboarding(config) });
 const device = buildServer(service, { https: { key: readFileSync(resolve(localDir, 'bridge-key.pem')), cert: readFileSync(resolve(localDir, 'bridge-cert.pem')) } });
 await local.listen({ host: '127.0.0.1', port: config.localPort });
 try { await device.listen({ host: config.host, port: config.port }); }

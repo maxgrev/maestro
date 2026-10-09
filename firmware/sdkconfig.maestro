@@ -8,3 +8,5 @@ CONFIG_SECURE_FLASH_ENC_ENABLED=n
 # Needed for USB screenshots during bring-up.
 CONFIG_LV_USE_SNAPSHOT=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
+# Resolve the Mac's Bonjour name; DHCP changes do not need a firmware update.
+CONFIG_LWIP_DNS_SUPPORT_MDNS_QUERIES=y

@@ -4,20 +4,21 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Maestro — Your agents, within reach</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/setup.css">
 </head>
 <body>
-  <header><a class="brand" href="/">Maestro<span class="brand-dot" aria-hidden="true"></span></a><span id="connection" role="status">Connecting…</span></header>
+  <header><a class="brand" href="/">Maestro</a><a href="/setup.html">Set up device &amp; agents</a><span id="connection" role="status">Connecting…</span></header>
   <main>
     <section class="device-column" aria-labelledby="title">
       <div class="intro"><h1 id="title">Your agents, <br>within reach.</h1><p>Choose a conversation. Pick up where you left off.</p></div>
       <div class="watch" aria-label="Conversation preview">
         <div class="watch-face"><div class="watch-status" id="watch-state">READY</div>
           <div class="watch-agent" id="watch-agent">Maestro</div>
-          <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M20 66V34L50 60 80 34V66" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="companion codex" id="watch-character" aria-hidden="true"><i></i><i></i><b></b></div>
           <p id="watch-caption">Tap an agent<br>to begin.</p><span class="watch-hint">HOLD TO TALK</span>
         </div><div class="hardware-button" aria-hidden="true"></div>
       </div>
-      <p class="device-note">StopWatch · Push-to-talk<br><span>Muse pairs directly through its phone app.</span></p>
+      <p class="device-note">On StopWatch: blue opens your agents.<br><span>Yellow chooses, then hold yellow to talk.<br>This preview follows the Mac conversation.</span></p>
     </section>
     <section class="workspace" aria-label="Agent conversations">
       <div class="section-heading"><h2>Conversations</h2><button id="refresh" class="text-button">Refresh</button></div>
@@ -33,7 +34,7 @@
       <p id="error" class="error" role="alert"></p>
     </section>
   </main>
-  <footer><span>Local bridge · Your Mac handles speech.</span><span>Maestro 0.1</span></footer>
+  <footer><span>Your Mac handles speech.</span><span>Maestro 0.2</span></footer>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

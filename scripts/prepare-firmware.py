@@ -30,28 +30,65 @@ def edit(path, old, new):
 
 for path in (ROOT / "firmware/src").glob("*"):
     copy_changed(path, MUSE / path.name)
-cfg = json.loads((ROOT / ".local/config.json").read_text())
-device = json.loads((ROOT / ".local/device.json").read_text())
-cert = (ROOT / ".local/bridge-cert.pem").read_text()
-(MUSE / "maestro_config.h").write_text(
-    "#pragma once\n"
-    + "#define MAESTRO_URL " + json.dumps(device["url"]) + "\n"
-    + "#define MAESTRO_TOKEN " + json.dumps(cfg["deviceToken"]) + "\n"
-    + "#define MAESTRO_CA " + json.dumps(cert) + "\n"
-)
-edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"')
+# One firmware image for every user. Credentials arrive over USB and stay in NVS.
+edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"\n        "maestro_settings.c"\n        "maestro_avatar.c"')
 edit(MUSE / "muse_app.c", '#include "muse_audio.h"', '#include "maestro.h"\n#include "muse_audio.h"')
 edit(MUSE / "muse_app.c", "    muse_state_init();", "    muse_state_init();\n    maestro_init();")
 edit(MUSE / "muse_ui.c", '#include "muse_state.h"', '#include "muse_state.h"\n#include "maestro.h"')
 edit(MUSE / "muse_ui.c", "    build_overlays();", "    build_overlays();\n    maestro_ui_build(s_face ? s_face : lv_screen_active());")
+edit(MUSE / "muse_ui.c", "    } else {\n        muse_menu_build(lv_screen_active(), s_w, s_h);\n    }",
+     "    }\n    muse_menu_build(lv_screen_active(), 310, 330);")
+edit(MUSE / "muse_ui.c", 'muse_board->touch ? LV_SYMBOL_POWER : LV_SYMBOL_LIST', 'LV_SYMBOL_LIST')
+edit(MUSE / "muse_ui.c", '        return MODE_NAMES[MUSE_MODE_IDLE];', '        return maestro_idle_label();')
+# Reuse the settings behavior within the round display's safe area.
+menu = MUSE / "muse_menu.c"
+edit(menu, '    lv_obj_set_size(s_root, w, h);',
+     '    lv_obj_set_size(s_root, w, h);\n    lv_obj_center(s_root);\n    lv_obj_set_style_radius(s_root, 24, 0);\n    lv_obj_set_style_border_width(s_root, 1, 0);\n    lv_obj_set_style_border_color(s_root, lv_color_hex(0x31483e), 0);')
+edit(menu, 'const lv_font_t *fine = small ? &lv_font_unscii_8 : &lv_font_unscii_16;',
+     'const lv_font_t *fine = &lv_font_montserrat_14;')
+edit(menu, 'muse_board->keyboard ? "Enter " : "", action', 'muse_board->keyboard ? "Enter " : "Yellow: ", action')
+edit(menu, 's_hint_down = label(s_root, font, COLOR_TEXT, "");', 's_hint_down = label(s_root, fine, COLOR_TEXT, "");')
+edit(menu, 's_hint_select = label(s_root, font, COLOR_TEXT, "");', 's_hint_select = label(s_root, fine, COLOR_TEXT, "");')
+edit(menu, 's_down_text = muse_board->keyboard ? "Esc Back" : LV_SYMBOL_DOWN " Down";', 's_down_text = muse_board->keyboard ? "Esc Back" : "Blue: next";')
+edit(menu, 'align_on_bar(s_hint_down, aux->align == LV_ALIGN_RIGHT_MID ? LV_ALIGN_BOTTOM_LEFT : aux->align, pad);', 'align_on_bar(s_hint_down, LV_ALIGN_BOTTOM_LEFT, pad);')
+edit(menu, 'align_on_bar(s_hint_select, talk->align, pad);', 'align_on_bar(s_hint_select, LV_ALIGN_BOTTOM_RIGHT, pad);')
+edit(menu, 'const muse_button_hint_t *talk = &muse_board->talk_hint, *aux = &muse_board->aux_hint;', 'const muse_button_hint_t *aux = &muse_board->aux_hint;')
+avatar = ESP / "avatar/muse_pixel.c"
+edit(avatar, '#include "muse_pixel.h"', '#include "muse_pixel.h"\n#include "maestro_avatar.h"')
+edit(avatar, 'void muse_pixel_render(const muse_pose_t *p)\n{',
+     'void muse_pixel_render(const muse_pose_t *p)\n{\n    if (maestro_avatar_render(p)) return;')
+edit(avatar, '    int n = x1 - x0 + 1;',
+     '    if (maestro_avatar_scale(dst, stride_px, x0, x1, y0, y1, s_size)) return;\n    int n = x1 - x0 + 1;')
+edit(ESP / "main/identity.c", '#include "identity.h"', '#include "identity.h"\n#include "maestro_settings.h"')
+edit(ESP / "main/identity.c", '    return CONFIG_GADGET_SDK_TOKEN[0] ? CONFIG_GADGET_SDK_TOKEN : NULL;',
+     '    return maestro_muse_token();')
 edit(MUSE / "muse_voice.c", '#include "muse_wifi.h"', '#include "muse_wifi.h"\n#include "maestro_route.h"')
 # Offline notes have no provider identity upstream. Never silently replay them to another agent.
 edit(MUSE / "muse_voice.c", "#define HOLD_NOTES 1", "#define HOLD_NOTES 0")
 edit(MUSE / "muse_voice.c", "NOTE SENT - WAITING FOR MUSE", "SENT - WAITING FOR REPLY")
 edit(MUSE / "muse_input.c", '#include "muse_console.h"', '#include "muse_console.h"\n#include "maestro.h"')
+edit(MUSE / "muse_input.c", '#define SERIAL_LINE 1024', '#define SERIAL_LINE 8192')
 edit(MUSE / "muse_input.c", '    if (!strcmp(line, "status")) {',
-     '    if (!strcmp(line, "maestro.agents")) { maestro_show_agents(); return true; }\n'
+     '    if (maestro_console(line, whole)) return true;\n'
      '    if (!strcmp(line, "status")) {')
+edit(MUSE / "muse_input.c", 'static void aux_key(bool pressed, bool edge)\n{',
+     'static void aux_key(bool pressed, bool edge)\n{\n    maestro_aux(pressed, edge); return;')
+edit(MUSE / "muse_input.c", '        } else if (muse_menu_is_open()) {',
+     '        } else if (maestro_confirm()) {\n            swallow = true;\n        } else if (muse_menu_is_open()) {')
+board = MUSE / "boards/board_m5stack_stopwatch.c"
+edit(board, 'static unsigned poll_buttons(void)\n{', '''static volatile bool s_buzz;
+void maestro_haptic(void) { s_buzz = true; }
+static unsigned poll_buttons(void)
+{
+    static TickType_t buzz_until;
+    if (s_buzz) {
+        s_buzz = false;
+        ioe_set(IOE_MOTOR, true);
+        buzz_until = xTaskGetTickCount() + pdMS_TO_TICKS(35);
+    } else if (buzz_until && (int32_t)(xTaskGetTickCount() - buzz_until) >= 0) {
+        ioe_set(IOE_MOTOR, false);
+        buzz_until = 0;
+    }''')
 
 # Use the SDK's own MP3 decoder and caption pacing for native Muse replies.
 session = MUSE / "muse_chat_session.cpp"
@@ -94,10 +131,7 @@ edit(session, "static void decode(void)\n{", """static void decode(void)
             s_turn.mp3_ended = true;
         }
     }""")
-token_file = ROOT / ".local/muse-sdk-token"
-token = token_file.read_text().strip() if token_file.exists() else ""
-if token and (not token.startswith("mgst_") or any(c.isspace() for c in token)):
-    raise SystemExit("Invalid Muse SDK token file.")
+token = ""
 overlay = (ROOT / "firmware/sdkconfig.maestro").read_text()
 token_setting = "CONFIG_GADGET_SDK_TOKEN=" + json.dumps(token)
 overlay += "\n" + token_setting + "\n"
@@ -107,10 +141,10 @@ overlay += "\n" + token_setting + "\n"
 cached_config = ESP / "build-maestro/sdkconfig"
 if cached_config.exists():
     settings = cached_config.read_text().splitlines()
-    settings = [line for line in settings if not line.startswith("CONFIG_GADGET_SDK_TOKEN=")
-                and line != "# CONFIG_GADGET_SDK_TOKEN is not set"]
-    cached_config.write_text("\n".join(settings) + "\n" + token_setting + "\n")
+    overrides = [line for line in overlay.splitlines() if line.startswith("CONFIG_") and "=" in line]
+    names = {line.split("=", 1)[0] for line in overrides}
+    settings = [line for line in settings if line.split("=", 1)[0] not in names
+                and not any(line == f"# {name} is not set" for name in names)]
+    cached_config.write_text("\n".join(settings + overrides) + "\n")
     cached_config.chmod(0o600)
-print("Prepared pinned Muse SDK with Maestro routing, selector, and native Muse speech.")
-if not token:
-    print("Muse SDK token is not set. Firmware can build; Muse pairing needs the token.")
+print("Prepared generic Maestro firmware. Set up bridge and Muse credentials over USB.")

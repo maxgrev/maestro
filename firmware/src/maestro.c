@@ -1,5 +1,8 @@
 #include "maestro.h"
-#include "maestro_config.h"
+#include "maestro_settings.h"
+#include "muse_menu.h"
+#include "esp_system.h"
+#include "nvs.h"
 #include "muse_mem.h"
 #include "muse_state.h"
 #include "muse_wifi.h"
@@ -22,7 +25,7 @@
 #define CAPTURE_FRAMES (16000 * 20)
 #define JSON_MAX 65536
 #define AUDIO_FRAMES 320
-typedef struct { char id[200], name[64], detail[96]; bool available; } target_t;
+typedef struct { char id[200], name[64], detail[96], status[40]; bool available; int character; } target_t;
 typedef struct { uint32_t gen; muse_hatch_ev_t type; char text[192]; } event_t;
 typedef struct { uint32_t gen; size_t frames; int16_t pcm[AUDIO_FRAMES]; } audio_t;
 typedef struct { uint32_t gen; int16_t *pcm; size_t frames; char target[200], id[37]; } job_t;
@@ -34,6 +37,13 @@ static atomic_uint s_gen;
 static atomic_bool s_switch, s_refresh;
 static atomic_bool s_show_agents;
 static atomic_bool s_selection_changed;
+static atomic_bool s_bridge_online, s_picker_open, s_reboot;
+static atomic_uint s_nav;
+static atomic_int s_character;
+static size_t s_focus;
+static lv_obj_t *s_row_buttons[TARGET_MAX], *s_list_note;
+static target_t s_visible[TARGET_MAX];
+static size_t s_visible_count;
 static bool s_native = true;
 static int16_t *s_capture;
 static size_t s_frames;
@@ -44,6 +54,20 @@ static lv_obj_t *s_label, *s_panel, *s_rows;
 static atomic_uint s_list_version;
 static uint32_t s_shown_version;
 static const char *TAG = "maestro";
+static void remember_target(const target_t *target)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "id", target->id);
+    cJSON_AddStringToObject(json, "name", target->name);
+    cJSON_AddNumberToObject(json, "character", target->character);
+    char *text = cJSON_PrintUnformatted(json);
+    nvs_handle_t handle;
+    if (text && nvs_open("maestro", NVS_READWRITE, &handle) == ESP_OK) {
+        if (nvs_set_str(handle, "selected", text) == ESP_OK) nvs_commit(handle);
+        nvs_close(handle);
+    }
+    free(text); cJSON_Delete(json);
+}
 static void text_copy(char *dst, const char *src, size_t cap)
 {
     if (!cap) return;
@@ -76,12 +100,12 @@ static const char *field(cJSON *json, const char *name)
 }
 static esp_http_client_handle_t open_http(const char *path, const char *type, const void *data, size_t size)
 {
-    if (!MAESTRO_URL[0] || !MAESTRO_TOKEN[0] || !muse_wifi_connected()) return NULL;
+    if (!maestro_url()[0] || !maestro_token()[0] || !muse_wifi_connected()) return NULL;
     char url[768], auth[160];
-    snprintf(url, sizeof(url), "%s%s", MAESTRO_URL, path);
-    snprintf(auth, sizeof(auth), "Bearer %s", MAESTRO_TOKEN);
+    snprintf(url, sizeof(url), "%s%s", maestro_url(), path);
+    snprintf(auth, sizeof(auth), "Bearer %s", maestro_token());
     esp_http_client_config_t cfg = {
-        .url = url, .cert_pem = MAESTRO_CA, .timeout_ms = 15000,
+        .url = url, .cert_pem = maestro_ca(), .timeout_ms = 15000,
         .disable_auto_redirect = true, .buffer_size = 4096,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
@@ -141,7 +165,12 @@ esp_http_client_handle_t maestro_tts_open(const char *text, const char *format)
 static void refresh_targets(void)
 {
     cJSON *json = json_http("/api/targets", NULL, NULL, 0);
-    if (!json) return;
+    if (!json || !cJSON_IsArray(cJSON_GetObjectItem(json, "targets"))) {
+        atomic_store(&s_bridge_online, false);
+        atomic_fetch_add(&s_list_version, 1);
+        cJSON_Delete(json); return;
+    }
+    atomic_store(&s_bridge_online, true);
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_count = 1;
     cJSON *item;
@@ -153,7 +182,14 @@ static void refresh_targets(void)
         strlcpy(target->id, id, sizeof(target->id));
         text_copy(target->name, field(item, "name"), sizeof(target->name));
         text_copy(target->detail, field(item, "detail"), sizeof(target->detail));
+        text_copy(target->status, field(item, "status"), sizeof(target->status));
+        const char *character = field(item, "character");
+        target->character = !strcmp(character, "grok") ? 1 : !strcmp(character, "codex") ? 2 : !strcmp(character, "claude") ? 3 : 4;
         target->available = cJSON_IsTrue(cJSON_GetObjectItem(item, "available"));
+    }
+    if (strcmp(s_selected.id, "muse")) {
+        s_selected.available = false;
+        for (size_t i = 1; i < s_count; i++) if (!strcmp(s_selected.id, s_targets[i].id)) s_selected = s_targets[i];
     }
     atomic_fetch_add(&s_list_version, 1);
     xSemaphoreGive(s_lock);
@@ -217,6 +253,7 @@ static void run_job(job_t *job)
                     text_copy(s_selected.name, field(target, "name"), sizeof(s_selected.name));
                     text_copy(s_selected.detail, field(target, "detail"), sizeof(s_selected.detail));
                     s_selected.available = !strcmp(state, "done");
+                    remember_target(&s_selected);
                     atomic_store(&s_selection_changed, true);
                     atomic_store(&s_refresh, true);
                 }
@@ -245,17 +282,21 @@ static void worker(void *arg)
 {
     (void)arg;
     job_t job;
+    int64_t refreshed = 0;
     for (;;) {
+        if (atomic_exchange(&s_reboot, false)) { vTaskDelay(pdMS_TO_TICKS(500)); esp_restart(); }
         if (xQueueReceive(s_jobs, &job, pdMS_TO_TICKS(1000)) == pdTRUE) {
             run_job(&job);
             free(job.pcm);
-        } else if (atomic_exchange(&s_refresh, false) && muse_wifi_connected()) {
+        } else if (muse_wifi_connected() && (atomic_exchange(&s_refresh, false) || esp_timer_get_time() - refreshed > 15000000)) {
             refresh_targets();
+            refreshed = esp_timer_get_time();
         }
     }
 }
 void maestro_init(void)
 {
+    maestro_settings_load();
     s_lock = xSemaphoreCreateMutex();
     s_jobs = psram_queue(2, sizeof(job_t));
     s_events = psram_queue(12, sizeof(event_t));
@@ -263,6 +304,26 @@ void maestro_init(void)
     configASSERT(s_lock && s_jobs && s_events && s_audio);
     s_targets[0] = (target_t){.id = "muse", .name = "Muse", .detail = "Your daily assistant", .available = true};
     s_selected = s_targets[0]; s_count = 1;
+    nvs_handle_t handle;
+    if (nvs_open("maestro", NVS_READONLY, &handle) == ESP_OK) {
+        char text[512]; size_t size = sizeof(text);
+        if (nvs_get_str(handle, "selected", text, &size) == ESP_OK) {
+            cJSON *json = cJSON_Parse(text);
+            const char *id = field(json, "id"), *name = field(json, "name");
+            cJSON *who = cJSON_GetObjectItemCaseSensitive(json, "character");
+            if (id[0] && strlen(id) < sizeof(s_selected.id) && name[0] && cJSON_IsNumber(who)
+                && who->valueint >= 0 && who->valueint <= 4) {
+                strlcpy(s_selected.id, id, sizeof(s_selected.id));
+                text_copy(s_selected.name, name, sizeof(s_selected.name));
+                s_selected.character = who->valueint;
+                // Restore the identity, but wait for discovery to confirm availability.
+                s_selected.available = !strcmp(id, "muse");
+                atomic_store(&s_character, s_selected.character);
+            }
+            cJSON_Delete(json);
+        }
+        nvs_close(handle);
+    }
     if (!esp_sntp_enabled()) {
         esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
         esp_sntp_setservername(0, "pool.ntp.org");
@@ -278,7 +339,7 @@ bool maestro_ready(void)
     bool native = !strcmp(s_selected.id, "muse");
     bool available = s_selected.available;
     xSemaphoreGive(s_lock);
-    return native ? muse_hatch_ready() : available && MAESTRO_URL[0] && muse_wifi_connected();
+    return native ? muse_hatch_ready() : available && atomic_load(&s_bridge_online) && muse_wifi_connected();
 }
 void maestro_status(muse_hatch_status_t *out)
 {
@@ -379,56 +440,100 @@ bool maestro_caption(size_t played, char *out, size_t cap)
 }
 void maestro_resting(bool resting) { muse_hatch_set_resting(resting); }
 
-static void choose(lv_event_t *event)
+static void close_list(void)
+{
+    lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
+    atomic_store(&s_picker_open, false);
+}
+static void select_target(const target_t *target)
 {
     float secs;
     muse_mode_t mode = muse_state_mode(&secs);
     if (mode == MUSE_MODE_LISTENING) return;
-    const target_t *target = lv_event_get_user_data(event);
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (target->available) {
+    // A refreshed list can invalidate a row while its confirmation is queued.
+    bool current = false;
+    for (size_t i = 0; i < s_count; i++)
+        if (!strcmp(target->id, s_targets[i].id)) current = s_targets[i].available;
+    if (current && (!strcmp(target->id, "muse") || atomic_load(&s_bridge_online))) {
+        bool changed = strcmp(s_selected.id, target->id) != 0;
         s_selected = *target;
-        lv_label_set_text(s_label, s_selected.name);
+        if (changed) remember_target(target);
+        atomic_store(&s_character, target->character);
+        lv_label_set_text_fmt(s_label, "%s   " LV_SYMBOL_DOWN, s_selected.name);
         if (mode == MUSE_MODE_THINKING || mode == MUSE_MODE_SPEAKING) atomic_store(&s_switch, true);
-        lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
+        else if (changed) {
+            s_caption[0] = 0;
+            muse_state_set_caption("%s", "");
+            muse_state_set_mode(MUSE_MODE_IDLE);
+        }
+        close_list();
+        maestro_haptic();
     }
     xSemaphoreGive(s_lock);
     muse_state_poke();
 }
+static void choose(lv_event_t *event) { select_target(lv_event_get_user_data(event)); }
 static void row_deleted(lv_event_t *event) { free(lv_event_get_user_data(event)); }
+static void focus_row(void)
+{
+    for (size_t i = 0; i < s_visible_count; i++) {
+        lv_obj_set_style_border_width(s_row_buttons[i], i == s_focus ? 2 : 0, 0);
+        lv_obj_set_style_border_color(s_row_buttons[i], lv_color_hex(0xe8cb65), 0);
+    }
+    if (s_visible_count) lv_obj_scroll_to_view(s_row_buttons[s_focus], LV_ANIM_OFF);
+}
 static void list_render(void)
 {
+    char focused[200] = "";
+    if (s_focus < s_visible_count) strlcpy(focused, s_visible[s_focus].id, sizeof(focused));
     lv_obj_clean(s_rows);
+    s_visible_count = 0;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     for (size_t i = 0; i < s_count; i++) {
         // The row owns its target, so a background refresh cannot change a tap's recipient.
         target_t *target = heap_caps_malloc(sizeof(*target), MUSE_BIG_CAPS);
         if (!target) continue;
         *target = s_targets[i];
+        s_visible[s_visible_count] = *target;
         lv_obj_t *button = lv_button_create(s_rows);
-        lv_obj_set_size(button, lv_pct(100), 48);
+        s_row_buttons[s_visible_count++] = button;
+        if (!strcmp(focused, target->id)) s_focus = s_visible_count - 1;
+        lv_obj_set_size(button, lv_pct(100), 68);
         lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(s_targets[i].id, s_selected.id) ? 0x28443a : 0x171b1e), 0);
         lv_obj_set_style_radius(button, 10, 0);
-        if (!s_targets[i].available) lv_obj_add_state(button, LV_STATE_DISABLED);
         lv_obj_t *label = lv_label_create(button);
-        lv_obj_set_width(label, 236);
+        lv_obj_set_width(label, 230);
         lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(label, s_targets[i].name);
-        lv_obj_center(label);
+        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 0, -2);
+        lv_obj_t *detail = lv_label_create(button);
+        lv_obj_set_style_text_font(detail, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(detail, lv_color_hex(target->available ? 0xb7c9c1 : 0xd7b98b), 0);
+        lv_obj_set_width(detail, 230);
+        lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_DOTS);
+        lv_label_set_text(detail, target->available ? target->detail : target->status);
+        lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         lv_obj_add_event_cb(button, choose, LV_EVENT_CLICKED, target);
         lv_obj_add_event_cb(button, row_deleted, LV_EVENT_DELETE, target);
     }
     s_shown_version = atomic_load(&s_list_version);
     xSemaphoreGive(s_lock);
+    if (s_focus >= s_visible_count) s_focus = 0;
+    lv_label_set_text(s_list_note, !muse_wifi_connected() ? "Connect Wi-Fi in Settings" :
+        atomic_load(&s_bridge_online) ? "Blue: next   Yellow: choose" : "Mac offline. Open Maestro.");
+    focus_row();
 }
 static void open_list(lv_event_t *event)
 {
     (void)event;
     float secs;
     if (muse_state_mode(&secs) == MUSE_MODE_LISTENING) return;
-    if (!lv_obj_has_flag(s_panel, LV_OBJ_FLAG_HIDDEN)) { lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN); return; }
+    if (!lv_obj_has_flag(s_panel, LV_OBJ_FLAG_HIDDEN)) { close_list(); return; }
+    s_focus = 0;
     list_render();
     lv_obj_remove_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
+    atomic_store(&s_picker_open, true);
     lv_obj_move_foreground(s_panel);
     atomic_store(&s_refresh, true);
     muse_state_poke();
@@ -437,18 +542,88 @@ static void ui_tick(lv_timer_t *timer)
 {
     (void)timer;
     if (atomic_exchange(&s_show_agents, false)) open_list(NULL);
+    unsigned key = atomic_exchange(&s_nav, 0);
+    if (key == 3) { close_list(); muse_menu_key(MUSE_MENU_BACK); }
+    if (key == 1) {
+        if (!atomic_load(&s_picker_open)) open_list(NULL);
+        else if (s_visible_count) { s_focus = (s_focus + 1) % s_visible_count; focus_row(); }
+    }
+    if (key == 2 && atomic_load(&s_picker_open) && s_focus < s_visible_count) select_target(&s_visible[s_focus]);
     if (atomic_exchange(&s_selection_changed, false)) {
         xSemaphoreTake(s_lock, portMAX_DELAY);
-        lv_label_set_text(s_label, s_selected.name);
+        lv_label_set_text_fmt(s_label, "%s   " LV_SYMBOL_DOWN, s_selected.name);
         xSemaphoreGive(s_lock);
     }
     if (!lv_obj_has_flag(s_panel, LV_OBJ_FLAG_HIDDEN) && s_shown_version != atomic_load(&s_list_version)) list_render();
 }
 void maestro_show_agents(void) { atomic_store(&s_show_agents, true); }
+int maestro_character(void) { return atomic_load(&s_character); }
+const char *maestro_idle_label(void)
+{
+    if (!maestro_character()) return "READY";
+    if (!atomic_load(&s_bridge_online)) return "MAC OFF";
+    return maestro_ready() ? "READY" : "CHECK APP";
+}
+bool maestro_confirm(void)
+{
+    if (!atomic_load(&s_picker_open)) return false;
+    atomic_store(&s_nav, 2); return true;
+}
+void maestro_aux(bool pressed, bool edge)
+{
+    static int64_t began;
+    static bool swallowed;
+    if (pressed && edge) {
+        began = esp_timer_get_time();
+        swallowed = muse_state_asleep();
+        if (swallowed) muse_state_set_asleep(false);
+        muse_state_poke();
+    }
+    float secs;
+    if (muse_state_mode(&secs) == MUSE_MODE_LISTENING) { swallowed = true; return; }
+    if (pressed && !swallowed && esp_timer_get_time() - began >= 650000) {
+        atomic_store(&s_nav, 3); swallowed = true;
+    }
+    if (!pressed && edge && !swallowed) {
+        if (muse_menu_is_open()) muse_menu_key(MUSE_MENU_DOWN);
+        else atomic_store(&s_nav, 1);
+        muse_state_poke();
+    }
+}
+bool maestro_console(const char *line, bool whole)
+{
+    if (strncmp(line, "maestro.", 8)) return false;
+    if (!whole) { puts("@maestro.error command too long"); return true; }
+    if (!strcmp(line, "maestro.agents")) maestro_show_agents();
+    else if (!strcmp(line, "maestro.next")) atomic_store(&s_nav, 1);
+    else if (!strcmp(line, "maestro.confirm")) maestro_confirm();
+    else if (!strcmp(line, "maestro.settings")) atomic_store(&s_nav, 3);
+    else if (!strncmp(line, "maestro.setup=", 14)) {
+        bool ok = maestro_settings_save(line + 14);
+        printf("@maestro.setup {\"ok\":%s}\n", ok ? "true" : "false");
+        if (ok) atomic_store(&s_reboot, true);
+    } else if (!strcmp(line, "maestro.status")) {
+        cJSON *json = cJSON_CreateObject();
+        cJSON_AddNumberToObject(json, "version", 2);
+        cJSON_AddBoolToObject(json, "configured", maestro_url()[0]);
+        cJSON_AddBoolToObject(json, "bridge", atomic_load(&s_bridge_online));
+        cJSON_AddBoolToObject(json, "picker", atomic_load(&s_picker_open));
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        cJSON_AddStringToObject(json, "selected", s_selected.id);
+        cJSON_AddStringToObject(json, "name", s_selected.name);
+        cJSON_AddNumberToObject(json, "agents", s_count);
+        xSemaphoreGive(s_lock);
+        char *text = cJSON_PrintUnformatted(json);
+        if (text) printf("@maestro.status %s\n", text);
+        free(text); cJSON_Delete(json);
+    }
+    fflush(stdout);
+    return true;
+}
 void maestro_ui_build(lv_obj_t *parent)
 {
     lv_obj_t *button = lv_button_create(parent);
-    lv_obj_set_size(button, 260, 42);
+    lv_obj_set_size(button, 276, 46);
     lv_obj_align(button, LV_ALIGN_TOP_MID, 0, 84);
     lv_obj_set_style_bg_color(button, lv_color_hex(0x172320), 0);
     lv_obj_set_style_radius(button, 21, 0);
@@ -457,11 +632,11 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_set_width(s_label, 236);
     lv_obj_set_style_text_align(s_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(s_label, LV_LABEL_LONG_MODE_DOTS);
-    lv_label_set_text(s_label, "Muse");
+    lv_label_set_text_fmt(s_label, "%s   " LV_SYMBOL_DOWN, s_selected.name);
     lv_obj_center(s_label);
     lv_obj_add_event_cb(button, open_list, LV_EVENT_CLICKED, NULL);
     s_panel = lv_obj_create(lv_screen_active());
-    lv_obj_set_size(s_panel, 312, 336);
+    lv_obj_set_size(s_panel, 314, 330);
     lv_obj_center(s_panel);
     lv_obj_set_style_bg_color(s_panel, lv_color_hex(0x090c0d), 0);
     lv_obj_set_style_border_color(s_panel, lv_color_hex(0x31483e), 0);
@@ -470,13 +645,22 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_remove_flag(s_panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *close = lv_button_create(s_panel);
     lv_obj_set_size(close, 270, 40); lv_obj_align(close, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_t *title = lv_label_create(close); lv_label_set_text(title, "Choose agent   " LV_SYMBOL_CLOSE); lv_obj_center(title);
+    lv_obj_set_style_bg_color(close, lv_color_hex(0x253a30), 0);
+    lv_obj_t *title = lv_label_create(close); lv_label_set_text(title, "Your agents   " LV_SYMBOL_CLOSE); lv_obj_center(title);
     lv_obj_add_event_cb(close, open_list, LV_EVENT_CLICKED, NULL);
     s_rows = lv_obj_create(s_panel);
-    lv_obj_set_size(s_rows, 282, 252); lv_obj_align(s_rows, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_size(s_rows, 282, 206); lv_obj_align(s_rows, LV_ALIGN_TOP_MID, 0, 50);
     lv_obj_set_style_pad_all(s_rows, 0, 0); lv_obj_set_style_border_width(s_rows, 0, 0);
     lv_obj_set_style_bg_opa(s_rows, LV_OPA_TRANSP, 0);
     lv_obj_set_flex_flow(s_rows, LV_FLEX_FLOW_COLUMN);
+    s_list_note = lv_label_create(s_panel);
+    lv_obj_set_style_text_font(s_list_note, &lv_font_montserrat_14, 0);
+    lv_obj_align(s_list_note, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_t *hint = lv_label_create(parent);
+    lv_label_set_text(hint, "Blue: agents   Hold: settings");
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0xb7c9c1), 0);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -37);
     lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
-    lv_timer_create(ui_tick, 500, NULL);
+    lv_timer_create(ui_tick, 70, NULL);
 }

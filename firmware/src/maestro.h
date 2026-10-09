@@ -8,6 +8,12 @@ extern "C" {
 void maestro_init(void);
 void maestro_ui_build(lv_obj_t *parent);
 void maestro_show_agents(void);
+int maestro_character(void);
+const char *maestro_idle_label(void);
+bool maestro_confirm(void);
+void maestro_aux(bool pressed, bool edge);
+bool maestro_console(const char *line, bool whole);
+void maestro_haptic(void);
 bool maestro_ready(void);
 void maestro_status(muse_hatch_status_t *out);
 void maestro_begin(void);

@@ -10,6 +10,7 @@ export interface Target {
   identity?: string;
   kind?: string;
   project?: string;
+  character?: 'grok' | 'codex' | 'claude' | 'pi';
 }
 export interface Turn {
   id: string;

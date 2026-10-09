@@ -6,13 +6,15 @@ import { z } from 'zod';
 import type { Service } from './service.js';
 import { requestId } from './service.js';
 import { UserError } from './types.js';
+import type { Onboarding } from './onboarding.js';
+import { AgentSetup } from './agent-setup.js';
 
 function tokenMatches(header: string | undefined, token: string | undefined) {
   if (!token || !header?.startsWith('Bearer ')) return false;
   const a = Buffer.from(header.slice(7)), b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
 }
-export function buildServer(service: Service, options: { local?: boolean; https?: { key: Buffer; cert: Buffer } } = {}) {
+export function buildServer(service: Service, options: { local?: boolean; https?: { key: Buffer; cert: Buffer }; onboarding?: Onboarding } = {}) {
   const app = Fastify({ logger: false, bodyLimit: 700_000, ...(options.https ? { https: options.https } : {}) });
   app.addHook('onRequest', async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
@@ -37,7 +39,7 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     void reply.status(status).send({ error: message });
   });
   app.addContentTypeParser('audio/pcm', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
-  app.get('/api/health', async () => ({ name: 'Maestro', version: '0.1.0', speech: 'local', muse: 'Pair on the device using the Muse app' }));
+  app.get('/api/health', async () => ({ name: 'Maestro', version: '0.2.0', speech: 'local', muse: 'Pair on the device using the Muse app' }));
   app.get('/api/targets', () => service.targets());
   app.get('/api/turns', async () => ({ turns: service.store.list() }));
   app.get('/api/turns/:id', async req => {
@@ -64,6 +66,21 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     const audio = await service.speech.speak(b.text, b.format);
     return reply.type(b.format === 'pcm' ? 'audio/pcm' : 'audio/mpeg').send(audio);
   });
-  if (options.local) void app.register(fastifyStatic, { root: resolve('bridge/public') });
+  if (options.local) {
+    if (options.onboarding) {
+      const setup = options.onboarding;
+      app.get('/api/setup', () => setup.state());
+      app.get('/api/setup/grok-guide', async () => setup.grokGuide());
+      app.post('/api/setup/device', async (req, reply) => reply.code(202).send(setup.start(req.body)));
+      app.post('/api/setup/agents', async req => setup.saveAgents(req.body));
+      const agents=new AgentSetup();
+      app.get('/api/setup/coding',()=>agents.state());
+      app.post('/api/setup/coding',async req=>agents.start(req.body));
+      app.post('/api/setup/coding/cancel',async()=>agents.cancel());
+      app.post('/api/setup/coding/pi',async req=>agents.savePi(req.body));
+      app.addHook('onClose',async()=>{agents.cancel();});
+    }
+    void app.register(fastifyStatic, { root: resolve('bridge/public') });
+  }
   return app;
 }

@@ -1,91 +1,88 @@
 # Maestro
 
-A voice remote for the **M5Stack StopWatch C152**. Pick an agent, hold the talk button, and release to send. A small Mac bridge handles local speech, coding sessions, and Grok Bot requests. Muse keeps its native Gadget SDK connection.
+A voice remote for the **M5Stack StopWatch C152**. Choose an agent, hold yellow to talk, then release to send. The Mac app handles local speech, coding sessions, and Grok Bot requests. Muse uses the official Gadget SDK.
 
-**Built and checked on October 9, 2026.** The firmware, including the supplied Muse SDK token, is installed on the StopWatch and the device has joined Wi-Fi. Muse is paired with Elo and online; a spoken test passed through the physical microphone, Muse, and device reply playback. The Mac bridge works with real Codex sessions, including new conversations, follow-ups, transcription, and clean final replies. Grok's authenticated routine and local reply path passed live request and follow-up tests, including after a bridge restart. The device lists Grok Bot.
+## Use the Mac app
 
-| Agent | Current support |
-| --- | --- |
-| Codex | New and existing Herdr sessions; clean reply text from Codex's read-only app-server API. Live tested. |
-| Claude Code / Pi | Herdr discovery, launch, prompt, and terminal output. Install and sign in to their CLIs first. Voice announces completion; clean answer speech is currently Codex-only. Not live tested here. Pi means the Pi coding agent. |
-| Muse | Paired with Elo through the official Muse Gadget SDK. Physical microphone → native Muse voice note → reply playback passed, using the Mac TTS addition. Uses the SDK's current conversation; arbitrary chat selection/creation is not implemented. |
-| Grok Bot | Configured routine on the main Bot; replies return through its existing Mac connection. Live requests and follow-ups work. Maestro supplies the last 12 exchanges, capped at 24,000 text characters. This does not import arbitrary Bot chat transcripts. |
+Open `dist/Maestro.app`. It starts the bridge and opens one guided flow:
 
-Existing coding sessions must run in the configured Herdr session. Maestro does not take over arbitrary desktop chats or terminal processes.
+1. **Device:** connect USB, check the board, and install firmware. Maestro verifies a recovery copy before writing.
+2. **Wi-Fi:** enter a 2.4 GHz network or keep the device's verified saved network.
+3. **Agents:** pair Muse, connect a Grok Bot routine, or install and sign in to coding agents. Choose a project folder with the Mac folder picker. Codex needs your explicit folder-trust choice; its tool approvals still apply.
+4. **Try it:** check the device and Mac connection, open the agent list, and try a short message.
 
-**Run on this Mac**
+The app stays running when its window closes. Use its menu-bar item to reopen it. Quitting the app stops its bridge; Herdr keeps its conversations. Keep the Mac awake and on the same network for Grok, coding agents, and spoken replies.
 
-The tools and configuration are already installed locally. From this folder:
+This package targets **Apple Silicon macOS**. It includes its runtimes and speech model; no Homebrew or terminal is needed to run it. The development app has a local signature. A public release still needs a Developer ID signature, notarization, and distribution review of bundled third-party licenses. Do not tell users to bypass Gatekeeper.
 
-```sh
-npm start
-```
+## StopWatch controls
 
-Open [Maestro on localhost](http://localhost:4210). The launcher starts or reuses the dedicated `maestro` Herdr session. `Ctrl+C` stops the bridge; Herdr keeps its conversations. Open its terminal UI with `scripts/herdr.sh`. Use `npm run doctor` to check dependencies.
+| Control | On the main screen | In the agent list |
+| --- | --- | --- |
+| Yellow | Hold to record; release to send | Choose the highlighted agent |
+| Blue | Open agents | Move to the next row |
+| Hold blue | Open settings | Open settings |
+| Touch | Tap the agent name to open the list; swipe to settings | Tap a row to choose it; tap × to close |
+| Power | Keep the board's normal power function | Same |
 
-The bridge listens on loopback HTTP port 4210 for its local page and authenticated HTTPS port 4211 for the device. It needs this Mac awake and on the same network. No public tunnel or login service was installed.
+A short vibration confirms a choice. Settings reuse the SDK's volume, speaker, brightness, sleep, Wi-Fi, and phone setup controls. Blue moves through that menu; yellow selects. Hold blue to return.
 
-**Connect the StopWatch**
+Muse keeps its original character. Grok is a silver space cat, Codex a mint terminal robot, Claude a terracotta star, and Pi a golden sprout. They blink and respond to listening, thinking, speaking, and errors. They share the SDK's renderer, caption layout, and frame timing. Characters are Maestro artwork, not provider logos.
 
-1. Set its 2.4 GHz Wi-Fi over USB. This prompts for the password without saving it in shell history:
+The device remembers the selected agent. A missing or busy saved session stays unavailable; it does not silently redirect a message to Muse. The list refreshes after Wi-Fi connects and every 15 seconds while idle. The Mac page chooses the recipient of its own messages; the device has its own selector.
 
-   ```sh
-   .tools/python/bin/python scripts/wifi.py /dev/cu.usbmodem101
-   ```
+## Agent support
 
-2. Keep `npm start` running. Tap the agent name on the device to refresh and choose a conversation. Hold the talk button, then release. Bridge recordings must be 0.3–20 seconds. After a new coding session replies, the device selects that session for follow-ups.
-3. Muse is already paired on this StopWatch. The supplied SDK token is saved in `.local/muse-sdk-token` and included in the installed firmware. For a fresh installation, get a token from [gadgets.muse.ai](https://gadgets.muse.ai), save it in that private file before building, then follow the [official phone pairing steps](https://github.com/facebookincubator/muse-gadget-sdk/tree/d7e5d22bbd1cb8e6369310f72039247b76942e5a/esp32#readme). The StopWatch's yellow button confirms pairing and acts as push-to-talk afterward.
+| Agent | Supported connection | Limits |
+| --- | --- | --- |
+| Codex | New and existing Herdr sessions. Clean final replies from its read-only app-server API. | Existing sessions must be in Maestro's configured Herdr instance. If the read API times out, Maestro announces completion and keeps the terminal output available. |
+| Claude Code / Pi | Herdr discovery, launch, prompts, and terminal output. Install controls use pinned official packages. Codex and Claude use provider browser sign-in; Pi can reuse its saved account or accept a provider API key. | Voice announces completion; clean answer speech is currently Codex-only. Live account sign-in and voice runs for Claude/Pi have not been checked here. |
+| Muse | Official Muse Gadget SDK and phone pairing. The existing Elo pairing remains intact. | Uses the SDK's current conversation. Arbitrary chat creation and selection are not implemented. Muse spoken replies use Mac speech. |
+| Grok Bot | An authenticated routine on the user's Bot. Replies return through its existing Mac connection. | Needs a webhook URL/key from Grok Bot. Maestro supplies the last 12 complete exchanges, capped at 24,000 text characters; it does not import arbitrary Bot chat transcripts. |
 
-```sh
-npm run firmware:build
-.tools/python/bin/python scripts/flash.py /dev/cu.usbmodem101
-```
+Provider account consent and tool approvals remain with the provider. See [Grok Bot setup](docs/grok-bot.md). The wizard includes a routine instruction tailored to the current Mac, with a copy button.
 
-`.local/device.json` contains the bridge's LAN HTTPS address; the firmware embeds it, its pinned certificate, and a device bearer token. If the Mac's IP changes, update that address and regenerate the certificate if the new address is absent from its SANs, then rebuild and flash. Reserve the Mac's current IP in your router to avoid routine changes. The certificate expires after one year. Do not disable certificate checks.
+## Local data and networking
 
-The device needs network time for TLS, obtained through SNTP. Muse text can use its native connection without this Mac; Maestro's added spoken Muse replies need the bridge. The web page chooses the recipient for its own messages; it does not remotely change the device's selected agent.
+A downloaded app uses `~/Library/Application Support/Maestro`. A development app built under this checkout reuses its existing `.local` directory. The app remembers that location. Data includes the SQLite request history, private configuration, certificate, recovery copies, and tool installs. `MAESTRO_DATA` selects another directory for command-line development.
 
-**Configuration**
+The local page uses loopback HTTP port 4210. The device uses authenticated HTTPS port 4211 with a pinned certificate. Setup saves the URL, certificate, bearer token, and personal Muse SDK token to device NVS over USB. The generic firmware contains no personal credentials. Bonjour resolves the Mac's `.local` name when its certificate covers that name; numeric addresses remain supported.
 
-Private settings live in `.local/config.json`. `projects` is the allowlist for new coding sessions. `herdr.session` chooses an existing Herdr instance; the supplied launcher uses `maestro`. To connect another instance, change the configuration and start it separately. The agent keeps its normal tool permissions. Approvals stay in the agent's own interface.
+The certificate expires after one year. Renew it and use **Save to StopWatch** to provision the new pin. Do not disable certificate checks. The device uses SNTP for TLS time. No public tunnel, cloud relay, MQTT broker, or new orchestration framework is required.
 
-On this Mac, `.tools/codex` points at the working Codex app bundle because the global CLI wrapper was broken. Maestro launches it with `--no-daemon` to avoid a package-version conflict with the shared daemon. `codexBinary` must point at that same CLI for clean spoken replies. No global CLI or login settings were replaced.
+Device NVS and flash encryption remain off for recoverable development. Physical flash access can expose saved Wi-Fi and account credentials. Keep runtime data and recovery images private. Git ignores `.local`, tool caches, build output, and packaged apps.
 
-See [Grok Bot setup](docs/grok-bot.md) for the webhook and reply helper. Leave `grok` absent until it is configured; the UI shows the missing setup instead of a fake connected agent.
+## Development
 
-**A fresh checkout**
-
-This version targets Apple Silicon macOS, Node 24+, Python 3.13, Xcode command-line tools, and FFmpeg. For example, install missing prerequisites through Homebrew, then:
+For a fresh checkout, use Apple Silicon macOS, Node 24+, Python 3.13, Xcode command-line tools, and FFmpeg for the source-only bridge. `scripts/bootstrap.sh` downloads the pinned Muse SDK, ESP-IDF 6.0.1, Herdr 0.9.3, and whisper.cpp 1.8.3 with its multilingual base model.
 
 ```sh
 bash scripts/bootstrap.sh
+npm start
 ```
 
-The script downloads checksum-pinned Herdr 0.9.3 and the Muse SDK, installs ESP-IDF 6.0.1 in `.cache`, and builds whisper.cpp 1.8.3 with its multilingual base model. It keeps tools under `.tools`, uses `npm ci`, and preserves existing private configuration. It does not flash hardware. Install/sign in to your chosen agent CLI separately; make it available in PATH or link its executable into `.tools`. Then run `npm run setup` and set `codexBinary` if using Codex reply extraction.
-
-**Recovery**
-
-The original 16 MB flash image and SHA-256 checksum are in `.local/backups`. The flasher checks the backup before writing firmware and uses IDF's generated partition addresses. To restore this same StopWatch:
-
-```sh
-.tools/python/bin/python scripts/flash.py /dev/cu.usbmodem101 --restore
-```
-
-Close other serial monitors first. If the port disappears, reconnect USB or enter the board's download mode. This build disables OTA and automatic eFuse provisioning. NVS/flash encryption is also off for recoverable bring-up, so physical flash access can expose stored Wi-Fi and device credentials. Keep `.local`, firmware binaries, and backups private; they are ignored by Git.
-
-**Checks and limits**
+Open [the local setup flow](http://localhost:4210/setup.html). Development commands remain available; ordinary app users do not need them.
 
 ```sh
 npm run check
 npm test
+.tools/python/bin/python -m unittest discover -s scripts/tests -v
+npm run firmware:build
+.tools/portable-python/python/bin/python3 scripts/package-mac.py
 ```
 
-Twelve bridge tests cover duplicate requests, lost acknowledgments, restart recovery, bounded Grok history, busy conversations, stale or blocked targets, callback authentication, audio validation, and matching final answers. Three Python helper tests cover local delivery, invalid input, and redirect refusal. The pinned SDK's host suite ran 198 tests: 197 passed and one skipped for an optional dependency. Hardware boot, USB flashing, Wi-Fi agent discovery, the 466×466 UI, and the SDK's microphone/audio initialization checks passed. A synthesized recording completed the real HTTPS → whisper.cpp → Codex → final-text flow.
+`package-mac.py` verifies the portable runtime downloads, compiles TypeScript and the small AppKit/WebKit launcher, includes generic firmware and pinned dependencies, and creates `dist/Maestro-apple-silicon.zip`. The builder also needs Homebrew LAME; the resulting app does not. The app uses macOS `say` and bundled LAME instead of a full FFmpeg distribution.
 
-Muse's live hardware check used a short phrase spoken by this Mac and captured by the StopWatch's microphone through the SDK's push-to-talk bench controls. The 11.08-second recording had no clipped samples. Muse accepted it and returned one reply; the device decoded 0.83 seconds of reply audio at 16 kHz. Playback began 6.40 seconds after release. The device reported paired/Online, and the iPhone showed it connected. This checks the audio path, not a human judgment of speaker quality.
+`config.json` lists allowed projects, coding agents, the Herdr session, speech tools, and Grok's keys. The guided forms cover normal setup. Advanced Herdr instance changes still use this private configuration. Do not run two bridges on the same ports.
 
-Physical microphone round trips to Grok and coding agents, speaker quality judged by a listener, touch behavior, and battery life still need acceptance checks. Earlier development failures remain visible in local request history; requests are never silently replayed to clear an error.
+## Recovery and validation
 
-[Design and protocol notes](docs/build-plan.md) explain the small set of dependencies and the remaining targeting limits.
+The guided installer stores each board's 16 MB recovery image and checksum under `backups/<chip-mac>/`. It verifies the firmware manifest, board confirmation, chip identity, flash size, and backup before writing. A failed or uncertain request never retries itself. Reconnect USB and explicitly retry installation if needed.
 
-[Setup UX notes](docs/setup-ux.md) outline the guided setup to build after this MVP.
+The older `scripts/flash.py --restore` restores this development StopWatch's original factory image from `.local/backups/stopwatch-original.bin`. Use it only with the original board. Close other serial tools first.
+
+The tests cover USB log interleaving, paced certificate transfer, board confirmation, concurrent setup writes, secret-free status, failed-write handling, project trust, callback delivery, request deduplication, restart recovery, and speech format validation. The SDK host suite passed 197 tests, with one optional dependency test skipped.
+
+Live checks have covered Muse pairing and its physical voice path, Codex new sessions and follow-ups, and Grok routine replies. The guided installer has flashed this StopWatch, preserved Wi-Fi and Muse pairing, and verified its Bonjour connection to the Mac. Agent switching, selection after reboot, and characters have been checked on its display. The app installed Claude Code and found its saved account. Bundled speech and a recorded-audio request to Grok passed; the latest Mac-speaker-to-device-microphone test detected no speech. A human microphone/speaker check, battery life, a clean second Mac, and fresh Claude/Pi account flows remain acceptance work.
+
+[Setup design and limits](docs/setup-ux.md) · [Architecture notes](docs/build-plan.md)

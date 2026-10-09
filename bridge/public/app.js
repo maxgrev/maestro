@@ -11,6 +11,7 @@ async function api(path, options = {}) {
 function choose(id) {
   selected = id; renderTargets();
   const target = targets.find(t=>t.id===id);
+  $('watch-character').className='companion '+(target?.character||'codex');
   $('watch-agent').textContent = target?.name || 'Maestro';
   $('watch-caption').textContent = target ? 'Hold to speak.\nRelease to send.' : 'Select an agent to begin.';
   $('recipient').textContent = target ? 'To '+target.name : 'Select a conversation';
@@ -30,7 +31,7 @@ function renderTargets() {
     const row=el('button',undefined,'agent'+(selected===target.id?' selected':'')); row.type='button';
     row.dataset.target=target.id;
     row.setAttribute('aria-pressed',String(selected===target.id));
-    row.append(el('span',target.provider==='grok'?'G':target.name.slice(0,1).toUpperCase(),'agent-icon'));
+    const character=el('span',undefined,'companion '+(target.character||'pi'));character.setAttribute('aria-hidden','true');character.append(el('i'),el('i'),el('b'));row.append(character);
     const meta=el('span',undefined,'agent-meta'); meta.append(el('span',target.name,'agent-name'),el('span',target.detail||'Existing session','agent-detail'));
     row.append(meta,el('span',target.status==='new'?'New session':labels[target.status]||target.status,'agent-status'));
     row.addEventListener('click',()=>choose(target.id)); list.append(row);

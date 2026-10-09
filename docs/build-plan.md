@@ -40,7 +40,7 @@ Herdr returns terminal output. Maestro displays it verbatim, rather than feeding
 
 **Boundaries**
 
-The local web page binds to loopback and rejects foreign Host/Origin headers. Device routes require a bearer token and TLS; Grok callbacks require their own key. Commands accept saved project and target IDs, not arbitrary shell commands. Local speech files are temporary and removed after use. Secrets, firmware with embedded tokens, backups, and request history stay in ignored private directories.
+The local web page binds to loopback and rejects foreign Host/Origin headers. Device routes require a bearer token and TLS; Grok callbacks require their own key. Commands accept saved project and target IDs, not arbitrary shell commands. Local speech files are temporary and removed after use. Secrets, backups, and request history stay in ignored private directories. The generic firmware contains no personal keys; setup writes device credentials to NVS over USB.
 
 The firmware preserves USB recovery by disabling automatic eFuse provisioning, encrypted-flash setup, and upstream OTA. These are development choices, not a production physical-security claim. Native Muse account pairing and a physical microphone/reply-playback test passed. Human speaker-quality review, touch behavior, and battery life remain acceptance checks.
 
