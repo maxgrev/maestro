@@ -48,23 +48,54 @@ edit(MUSE / "muse_ui.c", 'static void invalidate_muse(void)\n{', '''static void 
         return;
     }''')
 edit(MUSE / "muse_ui.c", "    build_overlays();", "    build_overlays();\n    maestro_ui_build(s_face ? s_face : lv_screen_active());")
-edit(MUSE / "muse_ui.c", "    } else {\n        muse_menu_build(lv_screen_active(), s_w, s_h);\n    }",
-     "    }\n    muse_menu_build(lv_screen_active(), 310, 330);")
 edit(MUSE / "muse_ui.c", 'muse_board->touch ? LV_SYMBOL_POWER : LV_SYMBOL_LIST', 'LV_SYMBOL_LIST')
 edit(MUSE / "muse_ui.c", '        return MODE_NAMES[MUSE_MODE_IDLE];', '        return maestro_idle_label();')
-# Reuse the settings behavior within the round display's safe area.
-menu = MUSE / "muse_menu.c"
-edit(menu, '    lv_obj_set_size(s_root, w, h);',
-     '    lv_obj_set_size(s_root, w, h);\n    lv_obj_center(s_root);\n    lv_obj_set_style_radius(s_root, 24, 0);\n    lv_obj_set_style_border_width(s_root, 1, 0);\n    lv_obj_set_style_border_color(s_root, lv_color_hex(0x31483e), 0);')
-edit(menu, 'const lv_font_t *fine = small ? &lv_font_unscii_8 : &lv_font_unscii_16;',
-     'const lv_font_t *fine = &lv_font_montserrat_14;')
-edit(menu, 'muse_board->keyboard ? "Enter " : "", action', 'muse_board->keyboard ? "Enter " : "Yellow: ", action')
-edit(menu, 's_hint_down = label(s_root, font, COLOR_TEXT, "");', 's_hint_down = label(s_root, fine, COLOR_TEXT, "");')
-edit(menu, 's_hint_select = label(s_root, font, COLOR_TEXT, "");', 's_hint_select = label(s_root, fine, COLOR_TEXT, "");')
-edit(menu, 's_down_text = muse_board->keyboard ? "Esc Back" : LV_SYMBOL_DOWN " Down";', 's_down_text = muse_board->keyboard ? "Esc Back" : "Blue: next";')
-edit(menu, 'align_on_bar(s_hint_down, aux->align == LV_ALIGN_RIGHT_MID ? LV_ALIGN_BOTTOM_LEFT : aux->align, pad);', 'align_on_bar(s_hint_down, LV_ALIGN_BOTTOM_LEFT, pad);')
-edit(menu, 'align_on_bar(s_hint_select, talk->align, pad);', 'align_on_bar(s_hint_select, LV_ALIGN_BOTTOM_RIGHT, pad);')
-edit(menu, 'const muse_button_hint_t *talk = &muse_board->talk_hint, *aux = &muse_board->aux_hint;', 'const muse_button_hint_t *aux = &muse_board->aux_hint;')
+# Use the native touch settings for both swipe and physical buttons.
+ui = MUSE / "muse_ui.c"
+edit(ui, 'static lv_obj_t *s_speaker;', 'static lv_obj_t *s_speaker;\nstatic lv_obj_t *s_mute_icon;\nstatic void maestro_agents_clicked(lv_event_t *event);')
+edit(ui, '    set_mic_color(COLOR_DIM);', '    set_mic_color(0xe8cb65);')
+edit(ui, 'set_mic_color(mode == MUSE_MODE_LISTENING ? accent : COLOR_DIM);',
+     'set_mic_color(mode == MUSE_MODE_LISTENING ? accent : 0xe8cb65);')
+edit(ui, '    lv_obj_align(s_aux_icon, a->align, a->x, a->y);', '''    lv_obj_align(s_aux_icon, a->align, a->x, a->y);
+    lv_obj_set_style_text_color(s_aux_icon, lv_color_hex(0x658cff), 0);
+    lv_obj_add_flag(s_aux_icon, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(s_aux_icon, 12);
+    lv_obj_add_event_cb(s_aux_icon, maestro_agents_clicked, LV_EVENT_CLICKED, NULL);''')
+edit(ui, '        build_speaker(face, spk_x, spk_y);', '        /* Volume and mute live in Settings > Sound. */')
+edit(ui, '    int spk_x = -s_w / 2 + 8 + spk_r, spk_y = -s_h / 2 + 8 + spk_r;',
+     '    int spk_y = -s_h / 2 + 8 + spk_r;')
+edit(ui, '        int d = ring_in - spk_r - 4;   /* just inside the ring, even when swollen */\n        spk_x = -(int)sqrtf((float)(d * d - spk_y * spk_y));\n', '')
+edit(ui, 'static void build_speaker(', 'static void __attribute__((unused)) build_speaker(')
+edit(ui, '    s_power_lbl = make_label(status, &lv_font_unscii_8, COLOR_DIM);', '''    s_power_lbl = make_label(status, &lv_font_unscii_8, COLOR_DIM);
+    s_mute_icon = make_label(status, &lv_font_montserrat_14, COLOR_DIM);''')
+edit(ui, '    bool speaker = muse_settings_speaker_on();', '''    bool speaker = muse_settings_speaker_on();
+    lv_label_set_text(s_mute_icon, speaker ? "" : LV_SYMBOL_MUTE);''')
+edit(ui, '        s_dots[i] = d;', '        s_dots[i] = d;\n        lv_obj_add_flag(d, LV_OBJ_FLAG_HIDDEN);')
+edit(ui, '        bool swipe = !page || !subpage;', '        bool swipe = (!page || !subpage) && !maestro_picker_is_open();')
+edit(ui, 'lv_obj_set_flag(s_dots[i], LV_OBJ_FLAG_HIDDEN, page && subpage);', 'lv_obj_add_flag(s_dots[i], LV_OBJ_FLAG_HIDDEN);')
+with ui.open("a") as out:
+    out.write('\n#include "maestro_ui_navigation.inc"\n')
+settings = MUSE / "muse_settings_ui.c"
+edit(settings, '#include "muse_settings_ui.h"', '#include "muse_settings_ui.h"\n#include "maestro.h"')
+edit(settings, '#define LIST_W 330', '#define LIST_W 310')
+edit(settings, '#define LIST_TOP 84', '#define LIST_TOP 120')
+edit(settings, '    lv_obj_align(b, LV_ALIGN_TOP_MID, -112, 28);',
+     '    lv_obj_align(b, LV_ALIGN_TOP_MID, -96, 36);\n    lv_obj_add_flag(b, LV_OBJ_FLAG_USER_1); /* Hold blue already goes back. */')
+edit(settings, '    catch_swipes(p);', '    catch_swipes(p);\n    maestro_menu_icons(p);')
+edit(settings, 'muse_board->height - list_top);', 'muse_board->height - list_top - (muse_board->round ? 70 : 0));')
+edit(settings, '    s_sound = page(tile, "SOUND", true, &list);',
+     '    s_sound = page(tile, "SOUND", true, &list);\n    if (muse_board->round) lv_obj_set_height(list, 244);')
+edit(settings, 'compact ? 32 : 110', 'compact ? 32 : 16')
+edit(settings, '    lv_obj_set_style_pad_row(list, 10, 0);',
+     '    lv_obj_set_style_pad_row(list, 10, 0);\n    lv_obj_set_style_pad_top(list, 4, 0);\n    lv_obj_set_style_pad_hor(list, 4, 0);')
+edit(settings, '    s_current = p;', '    s_current = p;\n    maestro_settings_focus_reset();')
+edit(settings, '        show(s_home);\n    }\n}', '        show(s_home);\n    } else {\n        muse_ui_show_face();\n    }\n}')
+edit(settings, '    s_home = page(tile, "SETTINGS", false, &list);',
+     '    s_home = page(tile, "SETTINGS", true, &list);\n    row(list, LV_SYMBOL_VOLUME_MAX, "Sound", &s_home_sound, on_nav, (void *)&SOUND);')
+edit(settings, '    row(list, LV_SYMBOL_BLUETOOTH, "Bluetooth", &s_home_ble, on_nav, (void *)&BLE);\n    row(list, LV_SYMBOL_VOLUME_MAX, "Sound", &s_home_sound, on_nav, (void *)&SOUND);',
+     '    row(list, LV_SYMBOL_BLUETOOTH, "Bluetooth", &s_home_ble, on_nav, (void *)&BLE);')
+with settings.open("a") as out:
+    out.write('\n#include "maestro_settings_navigation.inc"\n')
 avatar = ESP / "avatar/muse_pixel.c"
 edit(avatar, '#include "muse_pixel.h"', '#include "muse_pixel.h"\n#include "maestro_avatar.h"')
 edit(avatar, 'void muse_pixel_render(const muse_pose_t *p)\n{',
@@ -88,6 +119,8 @@ edit(MUSE / "muse_input.c", 'static void aux_key(bool pressed, bool edge)\n{',
 edit(MUSE / "muse_input.c", '        } else if (muse_menu_is_open()) {',
      '        } else if (maestro_confirm()) {\n            swallow = true;\n        } else if (muse_menu_is_open()) {')
 board = MUSE / "boards/board_m5stack_stopwatch.c"
+edit(board, '{ LV_ALIGN_CENTER, -91, -178 }', '{ LV_ALIGN_CENTER, -146, -146 }')
+edit(board, '{ LV_ALIGN_CENTER, 91, -178 }', '{ LV_ALIGN_CENTER, 146, -146 }')
 edit(board, 'static unsigned poll_buttons(void)\n{', '''static volatile bool s_buzz;
 void maestro_haptic(void) { s_buzz = true; }
 static unsigned poll_buttons(void)

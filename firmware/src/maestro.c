@@ -1,6 +1,6 @@
 #include "maestro.h"
 #include "maestro_settings.h"
-#include "muse_menu.h"
+#include "muse_ui.h"
 #include "esp_system.h"
 #include "nvs.h"
 #include "muse_mem.h"
@@ -30,16 +30,14 @@ typedef struct { char id[200], name[64], detail[96], status[40]; bool available;
 typedef struct { uint32_t gen; muse_hatch_ev_t type; char text[192]; } event_t;
 typedef struct { uint32_t gen; size_t frames; int16_t pcm[AUDIO_FRAMES]; } audio_t;
 typedef struct { uint32_t gen; int16_t *pcm; size_t frames; char target[200], id[37]; } job_t;
-static QueueHandle_t s_jobs, s_events, s_audio;
+static QueueHandle_t s_jobs, s_events, s_audio, s_nav;
 static SemaphoreHandle_t s_lock;
 static target_t s_targets[TARGET_MAX], s_selected, s_record_target;
 static size_t s_count;
 static atomic_uint s_gen;
 static atomic_bool s_switch, s_refresh;
-static atomic_bool s_show_agents;
 static atomic_bool s_selection_changed;
-static atomic_bool s_bridge_online, s_picker_open, s_reboot;
-static atomic_uint s_nav;
+static atomic_bool s_bridge_online, s_picker_open, s_settings_open, s_reboot;
 static atomic_int s_character;
 static size_t s_focus;
 static lv_obj_t *s_row_buttons[TARGET_MAX], *s_list_note;
@@ -307,6 +305,7 @@ void maestro_init(void)
     s_jobs = psram_queue(2, sizeof(job_t));
     s_events = psram_queue(12, sizeof(event_t));
     s_audio = psram_queue(24, sizeof(audio_t));
+    s_nav = psram_queue(8, sizeof(unsigned));
     s_caption = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
     configASSERT(s_lock && s_jobs && s_events && s_audio && s_caption);
     s_targets[0] = (target_t){.id = "muse", .name = "Muse", .detail = "Your daily assistant", .available = true};
@@ -451,6 +450,18 @@ static void close_list(void)
 {
     lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
     atomic_store(&s_picker_open, false);
+    muse_ui_set_swipe_enabled(true);
+}
+static void navigate(unsigned key)
+{
+    // Preserve button order while LVGL is busy drawing or building a page.
+    xQueueSend(s_nav, &key, 0);
+}
+static void session_label(void)
+{
+    const char *session = strstr(s_selected.name, " / ");
+    lv_label_set_text(s_label, session ? session + 3 :
+        s_selected.character >= 2 && !strncmp(s_selected.name, "New ", 4) ? "New session" : "");
 }
 static void select_target(const target_t *target)
 {
@@ -467,7 +478,7 @@ static void select_target(const target_t *target)
         s_selected = *target;
         if (changed) remember_target(target);
         atomic_store(&s_character, target->character);
-        lv_label_set_text_fmt(s_label, "%s   " LV_SYMBOL_DOWN, s_selected.name);
+        session_label();
         if (mode == MUSE_MODE_THINKING || mode == MUSE_MODE_SPEAKING) atomic_store(&s_switch, true);
         else if (changed) {
             s_caption[0] = 0;
@@ -497,6 +508,7 @@ static void list_render(void)
     lv_obj_clean(s_rows);
     s_visible_count = 0;
     xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (!focused[0]) strlcpy(focused, s_selected.id, sizeof(focused));
     for (size_t i = 0; i < s_count; i++) {
         // The row owns its target, so a background refresh cannot change a tap's recipient.
         target_t *target = heap_caps_malloc(sizeof(*target), MUSE_BIG_CAPS);
@@ -507,8 +519,15 @@ static void list_render(void)
         s_row_buttons[s_visible_count++] = button;
         if (!strcmp(focused, target->id)) s_focus = s_visible_count - 1;
         lv_obj_set_size(button, lv_pct(100), 68);
-        lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(s_targets[i].id, s_selected.id) ? 0x28443a : 0x171b1e), 0);
-        lv_obj_set_style_radius(button, 10, 0);
+        lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(s_targets[i].id, s_selected.id) ? 0x2e2552 : 0x1a1530), 0);
+        lv_obj_set_style_radius(button, 18, 0);
+        if (!strcmp(target->id, s_selected.id)) {
+            lv_obj_t *selected = lv_label_create(button);
+            lv_obj_set_style_text_font(selected, &lv_font_montserrat_14, 0);
+            lv_obj_set_style_text_color(selected, lv_color_hex(0xa77dff), 0);
+            lv_label_set_text(selected, LV_SYMBOL_OK);
+            lv_obj_align(selected, LV_ALIGN_RIGHT_MID, 0, 0);
+        }
         lv_obj_t *label = lv_label_create(button);
         // Dots mode needs a fixed height to keep long session names on one line.
         lv_obj_set_size(label, 230, lv_font_get_line_height(&lv_font_montserrat_20));
@@ -529,7 +548,7 @@ static void list_render(void)
     xSemaphoreGive(s_lock);
     if (s_focus >= s_visible_count) s_focus = 0;
     lv_label_set_text(s_list_note, !muse_wifi_connected() ? "Connect Wi-Fi in Settings" :
-        atomic_load(&s_bridge_online) ? "Blue: next   Yellow: choose" : "Mac offline. Open Maestro.");
+        atomic_load(&s_bridge_online) ? "" : "Mac offline. Open Maestro.");
     focus_row();
 }
 static void open_list(lv_event_t *event)
@@ -538,9 +557,12 @@ static void open_list(lv_event_t *event)
     float secs;
     if (muse_state_mode(&secs) == MUSE_MODE_LISTENING) return;
     if (!lv_obj_has_flag(s_panel, LV_OBJ_FLAG_HIDDEN)) { close_list(); return; }
+    muse_ui_show_face();
+    muse_ui_set_swipe_enabled(false);
     s_focus = 0;
-    list_render();
+    s_visible_count = 0;
     lv_obj_remove_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
+    list_render();
     atomic_store(&s_picker_open, true);
     lv_obj_move_foreground(s_panel);
     atomic_store(&s_refresh, true);
@@ -549,22 +571,41 @@ static void open_list(lv_event_t *event)
 static void ui_tick(lv_timer_t *timer)
 {
     (void)timer;
-    if (atomic_exchange(&s_show_agents, false)) open_list(NULL);
-    unsigned key = atomic_exchange(&s_nav, 0);
-    if (key == 3) { close_list(); muse_menu_key(MUSE_MENU_BACK); }
+    unsigned key = 0;
+    xQueueReceive(s_nav, &key, 0);
+    if (key == 5) open_list(NULL);
+    bool settings = !atomic_load(&s_picker_open) && maestro_ui_settings_is_open();
+    maestro_settings_visible(settings);
+    if (key == 3) {
+        if (atomic_load(&s_picker_open)) close_list();
+        else if (settings) maestro_settings_key(3);
+        else maestro_ui_open_settings();
+    }
+    if (key == 4) { close_list(); maestro_ui_open_settings(); }
     if (key == 1) {
-        if (!atomic_load(&s_picker_open)) open_list(NULL);
+        if (settings) maestro_settings_key(1);
+        else if (!atomic_load(&s_picker_open)) open_list(NULL);
         else if (s_visible_count) { s_focus = (s_focus + 1) % s_visible_count; focus_row(); }
     }
-    if (key == 2 && atomic_load(&s_picker_open) && s_focus < s_visible_count) select_target(&s_visible[s_focus]);
+    if (key == 2) {
+        if (settings) maestro_settings_key(2);
+        else if (atomic_load(&s_picker_open) && s_focus < s_visible_count) select_target(&s_visible[s_focus]);
+    }
     if (atomic_exchange(&s_selection_changed, false)) {
         xSemaphoreTake(s_lock, portMAX_DELAY);
-        lv_label_set_text_fmt(s_label, "%s   " LV_SYMBOL_DOWN, s_selected.name);
+        session_label();
         xSemaphoreGive(s_lock);
     }
     if (!lv_obj_has_flag(s_panel, LV_OBJ_FLAG_HIDDEN) && s_shown_version != atomic_load(&s_list_version)) list_render();
+    float secs;
+    static uint32_t caption_version;
+    static char caption[MUSE_CAPTION_MAX];
+    muse_state_caption(caption, sizeof(caption), &caption_version);
+    lv_obj_set_flag(s_label, LV_OBJ_FLAG_HIDDEN, muse_state_mode(&secs) != MUSE_MODE_IDLE || caption[0]);
 }
-void maestro_show_agents(void) { atomic_store(&s_show_agents, true); }
+void maestro_show_agents(void) { navigate(5); }
+bool maestro_picker_is_open(void) { return atomic_load(&s_picker_open); }
+void maestro_settings_visible(bool visible) { atomic_store(&s_settings_open, visible); }
 int maestro_character(void) { return atomic_load(&s_character); }
 const char *maestro_idle_label(void)
 {
@@ -574,8 +615,8 @@ const char *maestro_idle_label(void)
 }
 bool maestro_confirm(void)
 {
-    if (!atomic_load(&s_picker_open)) return false;
-    atomic_store(&s_nav, 2); return true;
+    if (!atomic_load(&s_picker_open) && !atomic_load(&s_settings_open)) return false;
+    navigate(2); return true;
 }
 void maestro_aux(bool pressed, bool edge)
 {
@@ -590,11 +631,10 @@ void maestro_aux(bool pressed, bool edge)
     float secs;
     if (muse_state_mode(&secs) == MUSE_MODE_LISTENING) { swallowed = true; return; }
     if (pressed && !swallowed && esp_timer_get_time() - began >= 650000) {
-        atomic_store(&s_nav, 3); swallowed = true;
+        navigate(3); swallowed = true;
     }
     if (!pressed && edge && !swallowed) {
-        if (muse_menu_is_open()) muse_menu_key(MUSE_MENU_DOWN);
-        else atomic_store(&s_nav, 1);
+        navigate(1);
         muse_state_poke();
     }
 }
@@ -603,9 +643,10 @@ bool maestro_console(const char *line, bool whole)
     if (strncmp(line, "maestro.", 8)) return false;
     if (!whole) { puts("@maestro.error command too long"); return true; }
     if (!strcmp(line, "maestro.agents")) maestro_show_agents();
-    else if (!strcmp(line, "maestro.next")) atomic_store(&s_nav, 1);
+    else if (!strcmp(line, "maestro.next")) navigate(1);
     else if (!strcmp(line, "maestro.confirm")) maestro_confirm();
-    else if (!strcmp(line, "maestro.settings")) atomic_store(&s_nav, 3);
+    else if (!strcmp(line, "maestro.settings")) navigate(4);
+    else if (!strcmp(line, "maestro.back")) navigate(3);
     else if (!strncmp(line, "maestro.setup=", 14)) {
         bool ok = maestro_settings_save(line + 14);
         printf("@maestro.setup {\"ok\":%s}\n", ok ? "true" : "false");
@@ -616,6 +657,7 @@ bool maestro_console(const char *line, bool whole)
         cJSON_AddBoolToObject(json, "configured", maestro_url()[0]);
         cJSON_AddBoolToObject(json, "bridge", atomic_load(&s_bridge_online));
         cJSON_AddBoolToObject(json, "picker", atomic_load(&s_picker_open));
+        cJSON_AddBoolToObject(json, "settings", atomic_load(&s_settings_open));
         xSemaphoreTake(s_lock, portMAX_DELAY);
         cJSON_AddStringToObject(json, "selected", s_selected.id);
         cJSON_AddStringToObject(json, "name", s_selected.name);
@@ -628,47 +670,58 @@ bool maestro_console(const char *line, bool whole)
     fflush(stdout);
     return true;
 }
+void maestro_menu_icons(lv_obj_t *parent)
+{
+    for (int i = 0; i < 2; i++) {
+        lv_obj_t *icon = lv_label_create(parent);
+        lv_obj_set_style_text_font(icon, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_text_color(icon, lv_color_hex(i ? 0x658cff : 0xe8cb65), 0);
+        lv_label_set_text(icon, i ? LV_SYMBOL_DOWN : LV_SYMBOL_OK);
+        lv_obj_align(icon, LV_ALIGN_CENTER, i ? 146 : -146, -146);
+    }
+}
 void maestro_ui_build(lv_obj_t *parent)
 {
-    lv_obj_t *button = lv_button_create(parent);
-    lv_obj_set_size(button, 276, 46);
-    lv_obj_align(button, LV_ALIGN_TOP_MID, 0, 84);
-    lv_obj_set_style_bg_color(button, lv_color_hex(0x172320), 0);
-    lv_obj_set_style_radius(button, 21, 0);
-    lv_obj_set_style_text_font(button, &lv_font_montserrat_20, 0);
-    s_label = lv_label_create(button);
-    lv_obj_set_size(s_label, 236, lv_font_get_line_height(&lv_font_montserrat_20));
+    s_label = lv_label_create(parent);
+    lv_obj_set_style_text_font(s_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(s_label, lv_color_hex(0xb7b0cc), 0);
+    lv_obj_set_size(s_label, 270, lv_font_get_line_height(&lv_font_montserrat_16));
     lv_obj_set_style_text_align(s_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(s_label, LV_LABEL_LONG_MODE_DOTS);
-    lv_label_set_text_fmt(s_label, "%s   " LV_SYMBOL_DOWN, s_selected.name);
-    lv_obj_center(s_label);
-    lv_obj_add_event_cb(button, open_list, LV_EVENT_CLICKED, NULL);
+    session_label();
+    lv_obj_align(s_label, LV_ALIGN_TOP_MID, 0, 376);
     s_panel = lv_obj_create(lv_screen_active());
-    lv_obj_set_size(s_panel, 314, 330);
+    lv_obj_remove_style_all(s_panel);
+    lv_obj_set_size(s_panel, lv_pct(100), lv_pct(100));
     lv_obj_center(s_panel);
-    lv_obj_set_style_bg_color(s_panel, lv_color_hex(0x090c0d), 0);
-    lv_obj_set_style_border_color(s_panel, lv_color_hex(0x31483e), 0);
-    lv_obj_set_style_radius(s_panel, 24, 0);
+    lv_obj_set_style_bg_color(s_panel, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(s_panel, LV_OPA_COVER, 0);
     lv_obj_set_style_text_font(s_panel, &lv_font_montserrat_20, 0);
     lv_obj_remove_flag(s_panel, LV_OBJ_FLAG_SCROLLABLE);
+    maestro_menu_icons(s_panel);
     lv_obj_t *close = lv_button_create(s_panel);
-    lv_obj_set_size(close, 270, 40); lv_obj_align(close, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(close, lv_color_hex(0x253a30), 0);
-    lv_obj_t *title = lv_label_create(close); lv_label_set_text(title, "Your agents   " LV_SYMBOL_CLOSE); lv_obj_center(title);
+    lv_obj_remove_style_all(close);
+    lv_obj_set_size(close, 56, 48); lv_obj_align(close, LV_ALIGN_TOP_MID, -96, 36);
+    lv_obj_t *arrow = lv_label_create(close); lv_label_set_text(arrow, LV_SYMBOL_LEFT); lv_obj_center(arrow);
+    lv_obj_set_style_text_color(arrow, lv_color_hex(0xa77dff), 0);
     lv_obj_add_event_cb(close, open_list, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *title = lv_label_create(s_panel);
+    lv_obj_set_style_text_font(title, &lv_font_unscii_16, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xa77dff), 0);
+    lv_obj_set_style_text_letter_space(title, 2, 0);
+    lv_label_set_text(title, "AGENTS"); lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 44);
     s_rows = lv_obj_create(s_panel);
-    lv_obj_set_size(s_rows, 282, 206); lv_obj_align(s_rows, LV_ALIGN_TOP_MID, 0, 50);
+    lv_obj_set_size(s_rows, 310, 234); lv_obj_align(s_rows, LV_ALIGN_TOP_MID, 0, 120);
     lv_obj_set_style_pad_all(s_rows, 0, 0); lv_obj_set_style_border_width(s_rows, 0, 0);
     lv_obj_set_style_bg_opa(s_rows, LV_OPA_TRANSP, 0);
     lv_obj_set_flex_flow(s_rows, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_rows, 10, 0);
+    lv_obj_set_style_pad_all(s_rows, 3, 0);
+    lv_obj_set_scroll_dir(s_rows, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_rows, LV_SCROLLBAR_MODE_OFF);
     s_list_note = lv_label_create(s_panel);
     lv_obj_set_style_text_font(s_list_note, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_list_note, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_t *hint = lv_label_create(parent);
-    lv_label_set_text(hint, "Blue: agents   Hold: settings");
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(hint, lv_color_hex(0xb7c9c1), 0);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -37);
+    lv_obj_align(s_list_note, LV_ALIGN_TOP_MID, 0, 396);
     lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
     lv_timer_create(ui_tick, 70, NULL);
 }

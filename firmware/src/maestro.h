@@ -8,6 +8,13 @@ extern "C" {
 void maestro_init(void);
 void maestro_ui_build(lv_obj_t *parent);
 void maestro_show_agents(void);
+bool maestro_picker_is_open(void);
+void maestro_settings_visible(bool visible);
+void maestro_ui_open_settings(void);
+bool maestro_ui_settings_is_open(void);
+void maestro_settings_key(unsigned key);
+void maestro_settings_focus_reset(void);
+void maestro_menu_icons(lv_obj_t *parent);
 int maestro_character(void);
 const char *maestro_idle_label(void);
 bool maestro_confirm(void);

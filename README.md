@@ -21,11 +21,11 @@ This package targets **Apple Silicon macOS**. It includes its runtimes and speec
 | --- | --- | --- |
 | Yellow | Hold to record; release to send | Choose the highlighted agent |
 | Blue | Open agents | Move to the next row |
-| Hold blue | Open settings | Open settings |
-| Touch | Tap the agent name to open the list; swipe to settings | Tap a row to choose it; tap × to close |
+| Hold blue | Open settings | Go back |
+| Touch | Tap the list icon for agents; swipe left for settings | Tap a row to choose it; tap the back arrow to close |
 | Power | Keep the board's normal power function | Same |
 
-A short vibration confirms a choice. Settings reuse the SDK's volume, speaker, brightness, sleep, Wi-Fi, and phone setup controls. Blue moves through that menu; yellow selects. Hold blue to return.
+A short vibration confirms a choice. Swipe and hold-blue open the same settings page. Blue moves between controls; yellow selects, toggles, or steps a slider. Hold blue to return. Volume and mute are under Sound. The character identifies the agent; a small title distinguishes coding sessions.
 
 Muse keeps its native animation. Codex uses its original blue companion. Claude uses the community's MIT-licensed Clawd Tank animations. Grok uses a moving black blob based on the supplied reference; Pi uses its official three-color mark. They respond to the device's state and share the SDK's display layer and captions. See [character sources and licenses](firmware/src/avatars/SOURCES.md).
 
