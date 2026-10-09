@@ -503,14 +503,15 @@ static void list_render(void)
         lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(s_targets[i].id, s_selected.id) ? 0x28443a : 0x171b1e), 0);
         lv_obj_set_style_radius(button, 10, 0);
         lv_obj_t *label = lv_label_create(button);
-        lv_obj_set_width(label, 230);
+        // Dots mode needs a fixed height to keep long session names on one line.
+        lv_obj_set_size(label, 230, lv_font_get_line_height(&lv_font_montserrat_20));
         lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(label, s_targets[i].name);
         lv_obj_align(label, LV_ALIGN_TOP_LEFT, 0, -2);
         lv_obj_t *detail = lv_label_create(button);
         lv_obj_set_style_text_font(detail, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(detail, lv_color_hex(target->available ? 0xb7c9c1 : 0xd7b98b), 0);
-        lv_obj_set_width(detail, 230);
+        lv_obj_set_size(detail, 230, lv_font_get_line_height(&lv_font_montserrat_14));
         lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(detail, target->available ? target->detail : target->status);
         lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 0, 0);
@@ -629,7 +630,7 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_set_style_radius(button, 21, 0);
     lv_obj_set_style_text_font(button, &lv_font_montserrat_20, 0);
     s_label = lv_label_create(button);
-    lv_obj_set_width(s_label, 236);
+    lv_obj_set_size(s_label, 236, lv_font_get_line_height(&lv_font_montserrat_20));
     lv_obj_set_style_text_align(s_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(s_label, LV_LABEL_LONG_MODE_DOTS);
     lv_label_set_text_fmt(s_label, "%s   " LV_SYMBOL_DOWN, s_selected.name);
