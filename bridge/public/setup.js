@@ -32,6 +32,9 @@ function render() {
   $('muse-device').textContent=d?.name||'your StopWatch';
   $('muse-form').querySelector('button').textContent=state.muse?'Replace token':'Save token';
   $('grok-state').textContent=state.grok?'Routine saved':'Connect routine';
+  if(!$('voice').options.length)(state.voices||[]).forEach(v=>$('voice').add(new Option(v.name,v.id)));
+  if(!$('voice').dataset.edited)$('voice').value=state.voice;
+  $('voice-state').textContent=(state.voices||[]).find(v=>v.id===state.voice)?.name||'Local speech';
   $('sync-device').disabled=busy||!d||d.maestro.version<2;
   $('check-pair').disabled=busy||!port;
   $('verify').disabled=busy||!port;
@@ -70,6 +73,16 @@ $('muse-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/ap
 $('grok-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{grok:{webhook:$('grok-url').value.trim(),key:$('grok-key').value.trim()}});$('grok-key').value='';$('grok-url').value='';await refresh();$('setup-message').textContent='Grok routine saved. Send a short message from Conversations to check its reply.';});};
 $('project-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{project:{name:$('project-name').value.trim(),path:$('project-path').value.trim(),trusted:$('project-trusted').checked}});await refresh();$('setup-message').textContent='Project saved. New coding sessions will use this folder.';});};
 $('project-path').oninput=()=>{$('project-trusted').checked=false;};
+$('voice').onchange=()=>{$('voice').dataset.edited='true';};
+$('voice-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{voice:$('voice').value});delete $('voice').dataset.edited;await refresh();$('voice-message').textContent='Saved. Your next reply will use this voice.';});};
+let previewUrl;
+$('voice-preview').onclick=()=>run(async()=>{
+  const audio=$('voice-audio');audio.pause();$('voice-message').textContent='Preparing voice…';
+  const response=await fetch('/api/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Hello, I’m Maestro. Pick your agent, hold the yellow button, and tell me what you need.',format:'mp3',voice:$('voice').value})});
+  if(!response.ok)throw new Error('Voice preview is unavailable. Please try again.');
+  const blob=await response.blob();if(previewUrl)URL.revokeObjectURL(previewUrl);
+  previewUrl=URL.createObjectURL(blob);audio.src=previewUrl;audio.hidden=false;await audio.play();$('voice-message').textContent='Previewing '+$('voice').selectedOptions[0].textContent;
+});
 $('check-pair').onclick=()=>run(async()=>{await operation('inspect');$('setup-message').textContent=state.device?.link.paired?'Muse is paired.':'Pair your StopWatch in the Muse phone app, then check again.';});
 $('sync-device').onclick=()=>run(async()=>{await operation('configure');show('ready');$('setup-message').textContent='Saved. Waiting for Wi-Fi and the Mac connection…';await new Promise(r=>setTimeout(r,15000));await operation('inspect');});
 $('verify').onclick=()=>run(async()=>{await operation('inspect');});

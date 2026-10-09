@@ -72,6 +72,18 @@ test('speech reads WAV data past metadata and rejects wrong or truncated formats
   const stereo=Buffer.from(basic);stereo.writeUInt16LE(2,22);assert.throws(()=>pcmFromWav(stereo));
   assert.throws(()=>pcmFromWav(basic.subarray(0,basic.length-1)));
 });
+test('voice selection applies to the running engine and survives unrelated setup saves',()=>{
+  const f=fixture();
+  try {
+    const speechConfig=f.config.speech, setup=new Onboarding(f.config,undefined,f.data);
+    setup.saveAgents({voice:'bf_emma'});
+    assert.equal(speechConfig.engine,'kokoro');assert.equal(speechConfig.neuralVoice,'bf_emma');
+    setup.saveAgents({grok:{webhook:'https://example.com/hook',key:'test'}});
+    assert.equal(f.config.speech,speechConfig);
+    assert.equal(JSON.parse(readFileSync(resolve(f.data,'config.json'),'utf8')).speech.neuralVoice,'bf_emma');
+    assert.throws(()=>setup.saveAgents({voice:'untrusted/voice'}));
+  } finally { f.cleanup(); }
+});
 test('setup writes are unavailable on the device listener and reject foreign browser origins',async()=>{
   const f=fixture();
   const service={config:f.config} as Service;

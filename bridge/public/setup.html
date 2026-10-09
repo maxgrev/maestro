@@ -49,7 +49,12 @@
             <p class="field-help">Codex can read, edit, and run files here under its usual permission settings. Folder settings can run code on startup. Trust only folders you know.</p>
             <button class="secondary">Save project</button>
           </form>
-          <p class="field-help">Existing chats outside Maestro’s Herdr session stay in their own apps. Claude Code and Pi report completion here; open their app for the full reply.</p>
+          <p class="field-help">Claude Code, Codex, and Pi return their full reply here and speak on your StopWatch. Existing chats outside Maestro’s Herdr session stay in their own apps.</p>
+        </details>
+        <details class="agent-setup"><summary><strong>Voice</strong><span id="voice-state">Local speech</span></summary>
+          <p>Natural voices run on your Mac with Kokoro. No account, key, or cloud speech service needed. Muse keeps the voice supplied by its agent when one is available.</p>
+          <form id="voice-form"><label for="voice">Reply voice</label><select id="voice"></select><div class="field-row"><button type="button" id="voice-preview" class="secondary">Preview voice</button><button>Save voice</button></div></form>
+          <audio id="voice-audio" controls hidden></audio><p id="voice-message" role="status"></p>
         </details>
         <div class="step-footer"><button id="sync-device">Save to StopWatch →</button><p class="field-help">Saves the Mac connection and Muse token, then restarts your device.</p></div>
       </section>
@@ -59,6 +64,6 @@
       </section>
     </section>
   </main>
-  <footer><span>Your Mac handles speech. Account keys stay in private local storage.</span></footer>
+  <footer><span>Your Mac handles speech. Account keys stay in private local storage.</span><a href="/characters/credits.html">Character &amp; voice credits</a></footer>
   <script type="module" src="/setup.js"></script>
 </body></html>

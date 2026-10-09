@@ -22,7 +22,7 @@ The official [Muse Gadget SDK](https://github.com/facebookincubator/muse-gadget-
 
 The first implementation uses ordinary authenticated HTTPS requests: a bounded PCM upload, a saved request receipt, and polling for the result. Half-duplex recordings do not need a permanent WebSocket. At 16 kHz mono PCM16, a 20-second request is 640 KB. Muse retains its own native voice-note transport. Add [Opus](https://opus-codec.org/) only after bandwidth or power measurements justify it; [MQTT](https://mqtt.org/) would add a broker without solving provider chat access. Neither is needed for this local build.
 
-Speech stays local to the Mac: whisper.cpp's multilingual base model for bridge transcription, macOS `say` and FFmpeg for speech output. Muse supplies its own transcription; its added spoken output uses the bridge's MP3 endpoint and the SDK's existing decoder. Text remains available if TTS fails. Bridge speech runs one operation at a time and reports busy instead of building an unbounded queue.
+Speech stays local to the Mac: whisper.cpp's multilingual base model for transcription and Kokoro through ONNX Runtime for speech. A small Python process streams 16 kHz PCM; LAME encodes MP3 for Muse's existing decoder. Voice selection and preview live in setup. The old macOS Samantha voice remains optional. Full replies stream without the old 1,800-character cutoff. Text remains available if speech fails. The bridge handles one speech operation at a time and reports busy instead of building an unbounded queue.
 
 **Delivery**
 
@@ -36,7 +36,7 @@ Grok's webhook acknowledgment is distinct from completion. The authenticated rep
 
 Herdr target identity includes its terminal ID, agent kind, and session identity when available. The bridge rechecks before submission and checks again after completion. Herdr 0.9.3 lacks an atomic expected-session field in `agent.prompt`, so a narrow replacement race remains between validation and submission. Do not claim this is an atomic guarantee or reuse a pane while a Maestro request is in flight.
 
-Herdr returns terminal output. Maestro displays it verbatim, rather than feeding terminal decorations or a stale answer to speech. For Codex, a read-only app-server client finds a completed turn with the exact input, project, and submission time, and uses only its final-answer items. Multiple or incomplete matches fall back to a completion notice and the terminal view. This client never starts threads, resumes them, or answers approvals. Other coding providers need a supported structured reply reader before they can speak full answers.
+Herdr's official hooks identify the native conversation. Maestro captures its message IDs before sending. Codex's read-only app-server API reads only that thread; Claude's official SDK follows its transcript chain; Pi's documented JSONL format supplies its active branch. Readers require the exact new input and a complete final answer. Thinking, tool output, old replies, and other branches never become spoken answers. Missing answers show Needs you and preserve terminal output. The read clients never start or resume conversations or answer approvals. Codex sessions opened before hook installation can use the single rollout file held by that pane's foreground process on macOS.
 
 **Boundaries**
 

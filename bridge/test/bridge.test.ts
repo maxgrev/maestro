@@ -21,10 +21,19 @@ const speech: SpeechEngine = { transcribe: async () => 'Read my calendar.', spea
 function fixture(fetcher: typeof fetch = async () => new Response('{}')) {
   const store = new Store(':memory:');
   const herdr = new Herdr(config, async () => ({ agents: [] }));
-  const service = new Service(config, store, herdr, speech, fetcher);
+  const service = new Service(config, store, herdr, { ...speech }, fetcher);
   return { store, service, app: buildServer(service) };
 }
 const auth = { authorization: `Bearer ${config.deviceToken}` };
+
+test('speech receives the full reply beyond the old 1800-character cutoff', async () => {
+  const f=fixture();let spoken='';
+  f.service.speech.speak=async text=>{spoken=text;return Buffer.from([0,0,1,0]);};
+  const text='A complete sentence. '.repeat(100)+'The final sentence matters.';
+  const response=await f.app.inject({method:'POST',url:'/api/speech',headers:auth,payload:{text,format:'pcm'}});
+  assert.equal(response.statusCode,200);assert.equal(spoken,text);
+  await f.app.close();f.store.close();
+});
 
 test('simultaneous duplicate submissions invoke the upstream webhook only once', async () => {
   let calls = 0;
@@ -196,4 +205,19 @@ test('Grok context keeps recent complete exchanges within its size bound', () =>
     store.db.prepare("UPDATE turns SET reply='short'").run();
     assert.equal(store.conversationHistory('grok').length, 12);
   } finally { store.close(); }
+});
+
+test('a missing Grok callback expires without a resend and a late reply still completes it', async () => {
+  let calls = 0;
+  const f = fixture(async () => { calls++; return new Response('{}'); });
+  const id = randomUUID();
+  await f.service.submit(id, 'grok', 'Test delayed reply'); await f.service.drain();
+  f.store.db.prepare('UPDATE turns SET updated=? WHERE id=?').run(Date.now() - 121_000, id);
+  assert.equal(f.store.get(id)?.state, 'uncertain');
+  assert.match(f.store.get(id)!.error, /do not resend/);
+  await f.service.submit(id, 'grok', 'Test delayed reply');
+  assert.equal(calls, 1);
+  const late = f.service.reply(id, 'The reply arrived.', false);
+  assert.equal(late.state, 'done'); assert.equal(late.error, '');
+  await f.app.close(); f.store.close();
 });

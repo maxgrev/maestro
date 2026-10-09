@@ -1,4 +1,5 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { Readable } from 'node:stream';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -15,7 +16,18 @@ export function wav(pcm: Buffer): Buffer {
   h.write('data', 36); h.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([h, pcm]);
 }
-export interface SpeechEngine { transcribe(pcm: Buffer): Promise<string>; speak(text: string, format: 'pcm' | 'mp3'): Promise<Buffer> }
+export interface SpeechEngine {
+  transcribe(pcm: Buffer): Promise<string>;
+  speak(text: string, format: 'pcm' | 'mp3', voice?: string): Promise<Buffer>;
+  stream?(text: string, format: 'pcm' | 'mp3', voice?: string): Readable;
+}
+export const voices = [
+  { id: 'af_heart', name: 'Heart · American', engine: 'kokoro' },
+  { id: 'af_bella', name: 'Bella · American', engine: 'kokoro' },
+  { id: 'am_michael', name: 'Michael · American', engine: 'kokoro' },
+  { id: 'bf_emma', name: 'Emma · British', engine: 'kokoro' },
+  { id: 'Samantha', name: 'Samantha · macOS', engine: 'macos' },
+];
 export function pcmFromWav(bytes: Buffer): Buffer {
   if (bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WAVE') throw new Error('Expected WAV speech.');
   let format = false;
@@ -54,11 +66,45 @@ export class Speech implements SpeechEngine {
       } finally { await rm(dir, { recursive: true, force: true }); }
     });
   }
-  async speak(text: string, format: 'pcm' | 'mp3'): Promise<Buffer> {
+  stream(text: string, format: 'pcm' | 'mp3', voice?: string): Readable {
+    return Readable.from(this.audio(text, format, voice));
+  }
+  async speak(text: string, format: 'pcm' | 'mp3', voice?: string): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of this.audio(text, format, voice)) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  }
+  private async *audio(text: string, format: 'pcm' | 'mp3', selected?: string): AsyncGenerator<Buffer> {
+    const engine = selected ? voices.find(v => v.id === selected)?.engine : this.config.engine;
+    if (engine !== 'kokoro') { yield await this.legacy(text, format); return; }
+    if (this.active) throw new UserError('Speech is busy. Please try again shortly.', 503);
+    const { python, helper, kokoro, lame } = this.config;
+    if (!python || !helper || !kokoro || (format === 'mp3' && !lame)) throw new Error('Neural speech files are missing. Reinstall Maestro.');
+    this.active = true;
+    const child = spawn(python, ['-u', helper, kokoro, lame ?? ''], { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
+    let failure: Error | undefined;
+    const timer = setTimeout(() => { failure = new Error('Speech timed out. Your text reply is still available.'); child.kill(); }, 60_000);
+    const closed = new Promise<void>(resolve => {
+      child.once('error', () => { failure = new Error('Neural speech could not start.'); });
+      child.once('close', code => { if (code !== 0) failure ??= new Error('Speech stopped. Your text reply is still available.'); resolve(); });
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end(JSON.stringify({ text, format, voice: selected ?? this.config.neuralVoice ?? 'af_heart' }));
+    try {
+      let size = 0;
+      for await (const chunk of child.stdout) { timer.refresh(); size += chunk.length; yield chunk as Buffer; }
+      await closed;
+      if (failure) throw failure;
+      if (size < 128) throw new Error('Speech returned no audio.');
+    } finally {
+      child.kill(); clearTimeout(timer); await closed; this.active = false;
+    }
+  }
+  private async legacy(text: string, format: 'pcm' | 'mp3'): Promise<Buffer> {
     return this.exclusive(async () => {
       const dir = await mkdtemp(join(tmpdir(), 'maestro-tts-'));
       try {
-        await writeFile(join(dir, 'reply.txt'), text.slice(0, 1800), { mode: 0o600 });
+        await writeFile(join(dir, 'reply.txt'), text, { mode: 0o600 });
         if (this.config.lame) {
           await exec('/usr/bin/say', ['-v', this.config.voice, '-f', join(dir, 'reply.txt'), '-o', join(dir, 'reply.wav'), '--file-format=WAVE', '--data-format=LEI16@16000'], { timeout: 60_000 });
           const pcm = pcmFromWav(await readFile(join(dir, 'reply.wav')));

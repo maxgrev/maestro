@@ -23,8 +23,9 @@
 
 #define TARGET_MAX 17
 #define CAPTURE_FRAMES (16000 * 20)
-#define JSON_MAX 65536
+#define JSON_MAX (160 * 1024)
 #define AUDIO_FRAMES 320
+#define CAPTION_BYTES 64001
 typedef struct { char id[200], name[64], detail[96], status[40]; bool available; int character; } target_t;
 typedef struct { uint32_t gen; muse_hatch_ev_t type; char text[192]; } event_t;
 typedef struct { uint32_t gen; size_t frames; int16_t pcm[AUDIO_FRAMES]; } audio_t;
@@ -48,7 +49,7 @@ static bool s_native = true;
 static int16_t *s_capture;
 static size_t s_frames;
 static bool s_overflow;
-static char s_caption[1801];
+static char *s_caption; // Full UTF-8 reply lives in PSRAM, leaving internal RAM for audio DMA.
 static uint32_t s_caption_gen;
 static lv_obj_t *s_label, *s_panel, *s_rows;
 static atomic_uint s_list_version;
@@ -105,7 +106,7 @@ static esp_http_client_handle_t open_http(const char *path, const char *type, co
     snprintf(url, sizeof(url), "%s%s", maestro_url(), path);
     snprintf(auth, sizeof(auth), "Bearer %s", maestro_token());
     esp_http_client_config_t cfg = {
-        .url = url, .cert_pem = maestro_ca(), .timeout_ms = 15000,
+        .url = url, .cert_pem = maestro_ca(), .timeout_ms = !strcmp(path, "/api/speech") ? 60000 : 15000,
         .disable_auto_redirect = true, .buffer_size = 4096,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
@@ -151,9 +152,7 @@ esp_http_client_handle_t maestro_tts_open(const char *text, const char *format)
 {
     if (!text || !text[0]) return NULL;
     cJSON *json = cJSON_CreateObject();
-    char short_text[1801];
-    text_copy(short_text, text, sizeof(short_text));
-    cJSON_AddStringToObject(json, "text", short_text);
+    cJSON_AddStringToObject(json, "text", text);
     cJSON_AddStringToObject(json, "format", format);
     char *body = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
@@ -195,15 +194,16 @@ static void refresh_targets(void)
     xSemaphoreGive(s_lock);
     cJSON_Delete(json);
 }
-static void speak_reply(uint32_t gen, const char *text)
+static bool speak_reply(uint32_t gen, const char *text)
 {
     esp_http_client_handle_t client = maestro_tts_open(text, "pcm");
-    if (!client) return; // Text remains usable when host speech is unavailable.
+    if (!client) return false;
     audio_t packet = {.gen = gen};
-    size_t used = 0;
+    size_t used = 0, received = 0;
     while (gen == atomic_load(&s_gen)) {
         int n = esp_http_client_read(client, (char *)packet.pcm + used, sizeof(packet.pcm) - used);
         if (n < 0) break;
+        received += n;
         used += n;
         if (used == sizeof(packet.pcm) || !n) {
             packet.frames = used / sizeof(int16_t);
@@ -214,7 +214,9 @@ static void speak_reply(uint32_t gen, const char *text)
         }
         if (!n) break;
     }
+    bool complete = received > 0 && esp_http_client_is_complete_data_received(client);
     esp_http_client_cleanup(client);
+    return complete;
 }
 static void run_job(job_t *job)
 {
@@ -257,13 +259,17 @@ static void run_job(job_t *job)
                     atomic_store(&s_selection_changed, true);
                     atomic_store(&s_refresh, true);
                 }
-                text_copy(s_caption, reply ? reply : "", sizeof(s_caption));
+                text_copy(s_caption, reply ? reply : "", CAPTION_BYTES);
                 s_caption_gen = job->gen;
                 xSemaphoreGive(s_lock);
                 emit(job->gen, MUSE_HATCH_EV_REPLY, reply);
                 cJSON_Delete(response);
-                if (reply) speak_reply(job->gen, reply);
+                bool spoken = reply && speak_reply(job->gen, reply);
                 free(reply);
+                if (!spoken && job->gen == atomic_load(&s_gen)) {
+                    emit(job->gen, MUSE_HATCH_EV_ERROR, "Speech stopped. Full reply is in Maestro.");
+                    return;
+                }
                 emit(job->gen, MUSE_HATCH_EV_DONE, "");
                 return;
             }
@@ -301,7 +307,8 @@ void maestro_init(void)
     s_jobs = psram_queue(2, sizeof(job_t));
     s_events = psram_queue(12, sizeof(event_t));
     s_audio = psram_queue(24, sizeof(audio_t));
-    configASSERT(s_lock && s_jobs && s_events && s_audio);
+    s_caption = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
+    configASSERT(s_lock && s_jobs && s_events && s_audio && s_caption);
     s_targets[0] = (target_t){.id = "muse", .name = "Muse", .detail = "Your daily assistant", .available = true};
     s_selected = s_targets[0]; s_count = 1;
     nvs_handle_t handle;

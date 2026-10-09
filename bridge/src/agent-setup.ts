@@ -9,6 +9,12 @@ import { UserError } from './types.js';
 const exec = promisify(execFile);
 const kinds = ['codex','claude','pi'] as const;
 type Kind = typeof kinds[number];
+export async function connectAgent(kind: Kind, herdr: string) {
+  // Official Herdr integrations only report lifecycle inside Herdr-managed panes.
+  const directory = kind === 'pi' ? '.pi/agent' : kind === 'claude' ? '.claude' : '.codex';
+  mkdirSync(join(homedir(), directory), { recursive: true, mode: 0o700 });
+  await exec(herdr, ['integration', 'install', kind], { timeout: 10000, maxBuffer: 16000 });
+}
 const packages: Record<Kind,string> = { codex:'@openai/codex@0.160.0', claude:'@anthropic-ai/claude-code@2.1.296', pi:'@mariozechner/pi-coding-agent@0.73.1' };
 export function agentBinary(kind: Kind): string | undefined {
   return [resolve(localDir,'agents/bin'),resolve(localDir,'bin'),resolve('.tools'),...(process.env.PATH??'').split(delimiter)]
@@ -19,7 +25,10 @@ const readiness = new Map<Kind,{at:number;value:{kind:Kind;installed:boolean;sig
 export async function agentReadiness(kind:Kind) {
   const cached=readiness.get(kind);if(cached&&Date.now()-cached.at<10_000)return cached.value;
   const binary=agentBinary(kind);let signedIn=false;
-  if(binary&&kind!=='pi')try{await exec(binary,kind==='codex'?['login','status']:['auth','status'],{timeout:4000,maxBuffer:16000});signedIn=true;}catch{}
+  if(binary&&kind!=='pi')try{
+    const result=await exec(binary,kind==='codex'?['login','status']:['auth','status'],{timeout:4000,maxBuffer:16000});
+    signedIn=kind==='claude'?JSON.parse(result.stdout).loggedIn===true:true;
+  }catch{}
   if(kind==='pi')try{
     const auth=JSON.parse(readFileSync(join(homedir(),'.pi/agent/auth.json'),'utf8'));
     signedIn=Object.values(auth).some(v=>v&&typeof v==='object'&&('type' in v));
@@ -63,7 +72,14 @@ export class AgentSetup {
     child.stdout?.on('data',read);child.stderr?.on('data',read);
     const timer=setTimeout(()=>child.kill(),300_000);
     child.once('error',()=>{job.state='failed';job.message='Could not start agent setup. Reopen Maestro and try again.';});
-    child.once('close',code=>{clearTimeout(timer);this.child=undefined;readiness.delete(kind);job.state=code===0?'done':'failed';job.message=code===0?(action==='install'?'Installed. Sign in to continue.':'Signed in.'):'Setup did not finish. Try again or use your existing agent account.';delete job.url;delete job.code;});
+    child.once('close',async code=>{
+      clearTimeout(timer); this.child=undefined; readiness.delete(kind);
+      if(code===0&&action==='install') {
+        try { await connectAgent(kind,resolve('.tools/herdr')); }
+        catch { job.state='failed';job.message='Agent installed, but its session connection failed. Retry setup in Maestro.';return; }
+      }
+      job.state=code===0?'done':'failed';job.message=code===0?(action==='install'?'Installed. Sign in to continue.':'Signed in.'):'Setup did not finish. Try again or use your existing agent account.';delete job.url;delete job.code;
+    });
     return job;
   }
   cancel(){this.child?.kill();return {cancelled:true};}

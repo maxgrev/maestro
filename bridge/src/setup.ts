@@ -24,7 +24,10 @@ if (!existsSync(resolve(localDir, 'config.json'))) {
     herdr: { binary: resolve('.tools/herdr'), session: 'maestro', configPath: resolve(localDir, 'herdr/config.toml') },
     projects: [{ id: 'maestro', name: 'Maestro', path: resolve('.') }], agents: ['codex', 'claude', 'pi'],
     ...(existsSync(resolve('.tools/codex')) ? { codexBinary: resolve('.tools/codex') } : {}),
-    speech: { whisper: resolve('.tools/whisper/bin/whisper-cli'), model: resolve('.tools/whisper/ggml-base.bin'), ffmpeg: 'ffmpeg', voice: 'Samantha' },
+    speech: { whisper: resolve('.tools/whisper/bin/whisper-cli'), model: resolve('.tools/whisper/ggml-base.bin'), ffmpeg: 'ffmpeg', voice: 'Samantha',
+      engine: 'kokoro', neuralVoice: 'af_heart', python: resolve('.tools/python/bin/python'), kokoro: resolve('.tools/kokoro'), helper: resolve('scripts/speech.py'),
+      ...(existsSync('/opt/homebrew/opt/lame/bin/lame') ? { lame: '/opt/homebrew/opt/lame/bin/lame' } : {}),
+    },
   };
   writeFileSync(resolve(localDir, 'config.json'), JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
 }

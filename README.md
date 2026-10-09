@@ -27,7 +27,7 @@ This package targets **Apple Silicon macOS**. It includes its runtimes and speec
 
 A short vibration confirms a choice. Settings reuse the SDK's volume, speaker, brightness, sleep, Wi-Fi, and phone setup controls. Blue moves through that menu; yellow selects. Hold blue to return.
 
-Muse keeps its original character. Grok is a silver space cat, Codex a mint terminal robot, Claude a terracotta star, and Pi a golden sprout. They blink and respond to listening, thinking, speaking, and errors. They share the SDK's renderer, caption layout, and frame timing. Characters are Maestro artwork, not provider logos.
+Muse keeps its native animation. Codex uses its original blue companion. Claude uses the community's MIT-licensed Clawd Tank animations. Grok uses a moving black blob based on the supplied reference; Pi uses its official three-color mark. They respond to the device's state and share the SDK's display layer and captions. See [character sources and licenses](firmware/src/avatars/SOURCES.md).
 
 The device remembers the selected agent. A missing or busy saved session stays unavailable; it does not silently redirect a message to Muse. The list refreshes after Wi-Fi connects and every 15 seconds while idle. The Mac page chooses the recipient of its own messages; the device has its own selector.
 
@@ -35,12 +35,18 @@ The device remembers the selected agent. A missing or busy saved session stays u
 
 | Agent | Supported connection | Limits |
 | --- | --- | --- |
-| Codex | New and existing Herdr sessions. Clean final replies from its read-only app-server API. | Existing sessions must be in Maestro's configured Herdr instance. If the read API times out, Maestro announces completion and keeps the terminal output available. |
-| Claude Code / Pi | Herdr discovery, launch, prompts, and terminal output. Install controls use pinned official packages. Codex and Claude use provider browser sign-in; Pi can reuse its saved account or accept a provider API key. | Voice announces completion; clean answer speech is currently Codex-only. Live account sign-in and voice runs for Claude/Pi have not been checked here. |
+| Codex | New and existing Herdr sessions. Full final replies from its read-only app-server API, bound to the exact conversation. | Sessions must be in Maestro's configured Herdr instance. A missing or ambiguous answer shows Needs you, with terminal output available. Maestro never resends it. |
+| Claude Code / Pi | Full answers from the exact native conversation: Claude's official session reader and Pi's documented session tree. New and existing Herdr sessions, with provider sign-in or Pi API keys in setup. | Sign-in is required. Claude folder trust stays in Claude. Live account checks remain pending at the user's request; local Claude protocol and Pi branch tests pass. |
 | Muse | Official Muse Gadget SDK and phone pairing. The existing Elo pairing remains intact. | Uses the SDK's current conversation. Arbitrary chat creation and selection are not implemented. Muse spoken replies use Mac speech. |
-| Grok Bot | An authenticated routine on the user's Bot. Replies return through its existing Mac connection. | Needs a webhook URL/key from Grok Bot. Maestro supplies the last 12 complete exchanges, capped at 24,000 text characters; it does not import arbitrary Bot chat transcripts. |
+| Grok Bot | An authenticated routine on the user's Bot. Replies return through its existing Mac connection. | Keep Grok Bot's Mac connection online. After two minutes without a reply, Maestro shows a delay and accepts a late callback without resending. History includes the last 12 complete exchanges, capped at 24,000 characters. |
 
 Provider account consent and tool approvals remain with the provider. See [Grok Bot setup](docs/grok-bot.md). The wizard includes a routine instruction tailored to the current Mac, with a copy button.
+
+## Voice
+
+Choose **Agents → Voice** to preview and save Heart, Bella, Michael, or Emma. Kokoro runs locally on the Mac; no account or speech API key is needed. Samantha, the earlier macOS `say` voice, remains an option. Muse uses agent-supplied audio when available, with Mac speech for text-only replies.
+
+The StopWatch streams 16 kHz PCM; Muse reuses the SDK's MP3 decoder. Speech no longer stops at 1,800 characters. The endpoint accepts up to 16,000 characters and reports errors instead of silently shortening a reply. Voice synthesis uses a bounded stream and stops when the device disconnects. Speech remains one operation at a time. These bundled voice choices speak English.
 
 ## Local data and networking
 
@@ -71,7 +77,7 @@ npm run firmware:build
 .tools/portable-python/python/bin/python3 scripts/package-mac.py
 ```
 
-`package-mac.py` verifies the portable runtime downloads, compiles TypeScript and the small AppKit/WebKit launcher, includes generic firmware and pinned dependencies, and creates `dist/Maestro-apple-silicon.zip`. The builder also needs Homebrew LAME; the resulting app does not. The app uses macOS `say` and bundled LAME instead of a full FFmpeg distribution.
+`package-mac.py` verifies the portable runtimes and Kokoro model checksums, compiles TypeScript and the AppKit/WebKit launcher, includes generic firmware and pinned dependencies, and creates `dist/Maestro-apple-silicon.zip`. The builder needs Homebrew LAME; the app bundles it. Kokoro uses ONNX Runtime, eSpeak NG, and soxr through a small Python helper. No full FFmpeg distribution is included. Source builds also need LAME for Muse's MP3 output.
 
 `config.json` lists allowed projects, coding agents, the Herdr session, speech tools, and Grok's keys. The guided forms cover normal setup. Advanced Herdr instance changes still use this private configuration. Do not run two bridges on the same ports.
 
@@ -83,6 +89,6 @@ The older `scripts/flash.py --restore` restores this development StopWatch's ori
 
 The tests cover USB log interleaving, paced certificate transfer, board confirmation, concurrent setup writes, secret-free status, failed-write handling, project trust, callback delivery, request deduplication, restart recovery, and speech format validation. The SDK host suite passed 197 tests, with one optional dependency test skipped.
 
-Live checks have covered Muse pairing and its physical voice path, Codex new sessions and follow-ups, and Grok routine replies. The guided installer has flashed this StopWatch, preserved Wi-Fi and Muse pairing, and verified its Bonjour connection to the Mac. Agent switching, selection after reboot, and characters have been checked on its display. The app installed Claude Code and found its saved account. Bundled speech and a recorded-audio request to Grok passed; the latest Mac-speaker-to-device-microphone test detected no speech. A human microphone/speaker check, battery life, a clean second Mac, and fresh Claude/Pi account flows remain acceptance work.
+Live checks have covered Muse pairing and its physical voice path, new and existing Codex sessions, and Grok routine replies. The updated StopWatch recorded a test phrase, received the exact Codex answer, and played Kokoro audio; playback started 8.45 seconds after release in that check. Grok's lost Mac connection recovered after restarting its app; the original receipt accepted its delayed answer and a fresh request completed. The real Claude CLI passed a multipart full-reply and follow-up check against a local test server, without an account. Pi's tests cover active branches, tool output, repeated prompts, and incomplete answers. Claude and Pi account sign-in remain pending at the user's request. A clean second Mac, battery life, and human listening remain acceptance work.
 
 [Setup design and limits](docs/setup-ux.md) · [Architecture notes](docs/build-plan.md)

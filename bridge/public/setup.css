@@ -10,3 +10,19 @@
 @media(max-width:950px){.setup-layout{gap:36px;margin:25px 28px 60px;grid-template-columns:minmax(230px,.8fr) minmax(0,1.2fr)}}
 @media(max-width:680px){.setup-layout{display:block;margin:16px 22px 44px}.setup-intro{position:static}.setup-intro h1{font-size:35px}.setup-intro h1 br{display:none}.setup-intro>p{max-width:none}.control-guide,.controls{display:none}.setup-steps{margin:28px 0;gap:0;justify-content:space-between}.setup-workspace h2{font-size:26px}.agent-setup summary span{font-size:12px}.setup-workspace>section{min-height:350px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+/* Reuse the same character art as the StopWatch. */
+.companion.codex,.companion.claude,.companion.pi{width:80px;height:87px;border:0;border-radius:0;background-color:transparent;display:block;image-rendering:auto}
+.companion.codex:before,.companion.claude:before,.companion.pi:before,.companion.codex i,.companion.claude i,.companion.pi i,.companion.codex b,.companion.claude b,.companion.pi b{display:none}
+.companion.codex{background-image:url('/characters/codex.webp');background-size:640px 957px;background-position:0 0;background-repeat:no-repeat}
+.watch-face .companion.codex,.guide-face .companion.codex{animation:codex-idle 6s steps(5) infinite alternate}
+.companion.claude{background:url('/characters/claude.gif') center/contain no-repeat;image-rendering:pixelated}
+.agent .companion.claude{background-image:url('/characters/claude.png')}
+.companion.pi{background:url('/characters/pi.svg') center/contain no-repeat}
+.companion.grok{background:radial-gradient(ellipse at 30% 20%,#25272a,#0b0b0d 70%);border:1px solid #52585d;border-radius:48% 52% 53% 47%;height:80px;color:#f2f2ef;gap:11px;transform:rotate(-12deg);align-items:flex-start;padding-top:20px}
+.companion.grok:before,.companion.grok b{display:none}.companion.grok i{width:7px;height:16px;border-radius:9px;transform:translateX(11px) rotate(-12deg)}.companion.grok i+i{margin-top:-4px}
+.agent .companion.grok{transform:scale(.46) rotate(-12deg)}
+.watch-face .companion.grok{animation:grok-breathe 4s ease-in-out infinite}.watch-face .companion.pi{animation:grok-breathe 4s ease-in-out infinite}
+#voice-audio{display:block;width:100%;margin-top:16px}#voice-audio[hidden]{display:none}
+@keyframes codex-idle{from{background-position:0 0}to{background-position:-400px 0}}
+@keyframes grok-breathe{0%,100%{translate:0 0}50%{translate:0 -3px}}
+@media(prefers-reduced-motion:reduce){.companion{animation:none!important}.companion.claude{background-image:url('/characters/claude.png')}}

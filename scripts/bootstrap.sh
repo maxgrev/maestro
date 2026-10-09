@@ -26,6 +26,8 @@ fetch https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-macos-aar
 chmod +x .tools/herdr
 if [[ ! -x .tools/python/bin/python ]]; then python3.13 -m venv .tools/python; fi
 .tools/python/bin/pip install 'cmake==4.4.4' 'ninja==1.13.2' 'esptool==5.5.0' 'pyserial==3.5'
+.tools/python/bin/pip install -r desktop/requirements-speech.txt
+.tools/python/bin/python scripts/fetch-voices.py
 export PATH="$ROOT/.tools/python/bin:$PATH"
 mkdir -p .cache/muse-gadget-sdk
 fetch https://codeload.github.com/facebookincubator/muse-gadget-sdk/tar.gz/d7e5d22bbd1cb8e6369310f72039247b76942e5a \

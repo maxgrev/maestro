@@ -24,6 +24,11 @@ config.herdr.configPath = resolve(localDir, 'herdr/config.toml');
 config.speech.whisper = resolve('.tools/whisper/bin/whisper-cli');
 config.speech.model = resolve('.tools/whisper/ggml-base.bin');
 config.speech.lame = resolve('.tools/lame');
+config.speech.python = process.env.MAESTRO_PYTHON ?? resolve('.tools/python/bin/python3');
+config.speech.kokoro = resolve('.tools/kokoro');
+config.speech.helper = resolve('scripts/speech.py');
+config.speech.engine ??= 'kokoro';
+config.speech.neuralVoice ??= 'af_heart';
 // Fresh installs get a real, writable folder rather than the app's resources.
 if (config.projects.length === 1 && config.projects[0]?.path === resolve('.')) {
   const project = join(homedir(), 'Documents/Maestro'); mkdirSync(project, {recursive:true});

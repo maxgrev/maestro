@@ -12,7 +12,10 @@ export const configSchema = z.object({
   projects: z.array(z.object({ id: z.string().regex(/^[a-z0-9_-]+$/), name: z.string().min(1).max(60), path: z.string().refine(s => s.startsWith('/')), trusted: z.boolean().optional() })).default([]),
   agents: z.array(z.enum(['codex', 'claude', 'pi'])).default(['codex', 'claude', 'pi']),
   codexBinary: z.string().optional(),
-  speech: z.object({ whisper: z.string(), model: z.string(), ffmpeg: z.string().default('ffmpeg'), lame: z.string().optional(), voice: z.string().default('Samantha') }),
+  speech: z.object({ whisper: z.string(), model: z.string(), ffmpeg: z.string().default('ffmpeg'), lame: z.string().optional(), voice: z.string().default('Samantha'),
+    engine: z.enum(['kokoro', 'macos']).optional(), neuralVoice: z.enum(['af_heart', 'af_bella', 'am_michael', 'bf_emma']).optional(),
+    python: z.string().optional(), kokoro: z.string().optional(), helper: z.string().optional(),
+  }),
   grok: z.object({ name: z.string().min(1).max(60).default('Grok Bot'), webhook: httpsUrl, key: z.string().min(1), replyKey: z.string().min(32) }).optional(),
 }).strict();
 export type Config = z.infer<typeof configSchema>;

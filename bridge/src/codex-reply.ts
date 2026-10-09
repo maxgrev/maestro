@@ -2,11 +2,12 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 interface Item { type: string; text?: string; phase?: string; content?: { type: string; text?: string }[] }
-interface Turn { status: string; startedAt?: number; items: Item[] }
+export interface CodexTurn { id?: string; status: string; startedAt?: number; items: Item[] }
 
 /** Select only a completed turn with our exact input and submission time. */
-export function matchingReply(turns: Turn[], input: string, since: number): string[] {
+export function matchingReply(turns: CodexTurn[], input: string, since: number, before = new Set<string>()): string[] {
   return turns.filter(turn => turn.status === 'completed' && turn.startedAt != null && turn.startedAt >= Math.floor(since / 1000)
+    && (!turn.id || !before.has(turn.id))
     && turn.items.some(item => item.type === 'userMessage'
       && item.content?.filter(c => c.type === 'text').map(c => c.text).join('\n').trim() === input.trim()))
     .flatMap(turn => {
@@ -19,7 +20,7 @@ export function matchingReply(turns: Turn[], input: string, since: number): stri
  * Read-only app-server client. It never starts/resumes a thread or answers an
  * approval. Ambiguous matches fall back to the terminal view.
  */
-export async function readCodexReply(binary: string, cwd: string, input: string, since: number): Promise<string | undefined> {
+export async function readCodexTurns(binary: string, threadId: string): Promise<CodexTurn[]> {
   const child = spawn(binary, ['app-server'], { stdio: ['pipe', 'pipe', 'ignore'] });
   const lines = createInterface({ input: child.stdout });
   let id = 0, received = 0, closed = false;
@@ -41,7 +42,7 @@ export async function readCodexReply(binary: string, cwd: string, input: string,
       }
     } catch { fail(); child.kill(); }
   });
-  const timeout = setTimeout(() => { fail(); child.kill(); }, 25_000);
+  const timeout = setTimeout(() => { fail(); child.kill(); }, 10_000);
   const call = <T>(method: string, params: unknown) => new Promise<T>((resolve, reject) => {
     if (closed) { reject(new Error('Codex reply reader closed.')); return; }
     const request = ++id; pending.set(request, { resolve: v => resolve(v as T), reject });
@@ -50,21 +51,13 @@ export async function readCodexReply(binary: string, cwd: string, input: string,
   try {
     await call('initialize', { clientInfo: { name: 'maestro_reply_reader', version: '0.1.0' } });
     child.stdin.write(JSON.stringify({ method: 'initialized', params: {} }) + '\n');
-    const list = await call<{ data: { id: string; cwd: string; updatedAt: number }[]; nextCursor?: string }>('thread/list', {
-      cwd, limit: 20, sortKey: 'updated_at', sortDirection: 'desc', sourceKinds: ['cli'],
+    // Herdr identifies the conversation. Listing all project chats is slow and
+    // cannot bind a reply to the selected terminal when prompts are repeated.
+    const result = await call<{ data: CodexTurn[] }>('thread/turns/list', {
+      threadId, limit: 20, itemsView: 'full', sortDirection: 'desc',
     });
-    // A partial list cannot prove uniqueness if its last item is still recent.
-    if (list.nextCursor && (list.data.at(-1)?.updatedAt ?? 0) >= Math.floor(since / 1000)) return;
-    const matches: string[] = [];
-    for (const thread of list.data.filter(t => t.cwd === cwd && t.updatedAt >= Math.floor(since / 1000))) {
-      const result = await call<{ data: Turn[]; nextCursor?: string }>('thread/turns/list', {
-        threadId: thread.id, limit: 5, itemsView: 'full', sortDirection: 'desc',
-      });
-      if (result.nextCursor && (result.data.at(-1)?.startedAt ?? 0) >= Math.floor(since / 1000)) return;
-      matches.push(...matchingReply(result.data, input, since));
-    }
-    return matches.length === 1 ? matches[0] : undefined;
-  } catch { return undefined; }
+    return result.data;
+  }
   finally {
     clearTimeout(timeout); fail(); lines.close(); child.stdin.end(); child.kill();
   }

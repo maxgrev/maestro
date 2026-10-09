@@ -28,8 +28,11 @@ def edit(path, old, new):
         raise SystemExit(f"Upstream changed: expected exactly one edit anchor {old!r} in {path.name}")
     path.write_text(text.replace(old, new))
 
-for path in (ROOT / "firmware/src").glob("*"):
-    copy_changed(path, MUSE / path.name)
+for path in (ROOT / "firmware/src").rglob("*"):
+    if path.is_file():
+        dest = MUSE / path.relative_to(ROOT / "firmware/src")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        copy_changed(path, dest)
 # One firmware image for every user. Credentials arrive over USB and stay in NVS.
 edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"\n        "maestro_settings.c"\n        "maestro_avatar.c"')
 edit(MUSE / "muse_app.c", '#include "muse_audio.h"', '#include "maestro.h"\n#include "muse_audio.h"')

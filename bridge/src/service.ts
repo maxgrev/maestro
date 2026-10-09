@@ -11,6 +11,7 @@ export class Service {
   private accepting = true;
   constructor(readonly config: Config, readonly store: Store, readonly herdr: Herdr, readonly speech: SpeechEngine, private fetcher = fetch) {}
   async targets(): Promise<{ targets: Target[]; warnings: string[] }> {
+    this.store.expireGrok();
     const targets: Target[] = [], warnings: string[] = [];
     try { targets.push(...await this.herdr.targets()); } catch { warnings.push('Herdr is offline. Start the configured Herdr session.'); }
     if (this.config.grok) targets.unshift({ id: 'grok', name: this.config.grok.name, provider: 'grok', detail: 'Saved routine', status: 'ready', available: true, character: 'grok' });

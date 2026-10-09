@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 let targets = [], turns = [], selected = '', sending = false, lastTurns = '', lastTargets = '', playing, playingUrl, refreshBusy = false;
 let followRequest;
+let speechController, playingTurn = '', playback = 0;
 const labels = { queued:'Queued',transcribing:'Transcribing',dispatching:'Sending',working:'Working',done:'Ready',needs_attention:'Needs you',uncertain:'Check delivery',failed:'Failed' };
 function el(tag, text, cls) { const node = document.createElement(tag); if(text !== undefined) node.textContent = text; if(cls) node.className = cls; return node; }
 async function api(path, options = {}) {
@@ -13,7 +14,7 @@ function choose(id) {
   const target = targets.find(t=>t.id===id);
   $('watch-character').className='companion '+(target?.character||'codex');
   $('watch-agent').textContent = target?.name || 'Maestro';
-  $('watch-caption').textContent = target ? 'Hold to speak.\nRelease to send.' : 'Select an agent to begin.';
+  $('watch-caption').textContent = !target ? 'Select an agent to begin.' : target.available ? 'Hold to speak.\nRelease to send.' : 'Check this agent on your Mac before sending.';
   $('recipient').textContent = target ? 'To '+target.name : 'Select a conversation';
   $('send').disabled = !target?.available || sending;
   renderWatch();
@@ -46,18 +47,24 @@ function pcmWav(pcm) {
   view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
   str(36,'data');view.setUint32(40,pcm.byteLength,true);bytes.set(new Uint8Array(pcm),44);return bytes;
 }
-async function listen(text, button) {
-  if(playing) { playing.pause(); playing=null; }
-  if(playingUrl) URL.revokeObjectURL(playingUrl);
-  button.disabled=true; button.textContent='Preparing…';
+function stopSpeech() {
+  playback++;speechController?.abort();speechController=null;
+  if(playing){playing.pause();playing=null;}if(playingUrl){URL.revokeObjectURL(playingUrl);playingUrl=null;}
+  document.querySelectorAll('[data-voice]').forEach(b=>{b.textContent='Listen';});playingTurn='';
+}
+async function listen(text, button, turnId) {
+  const stop=playingTurn===turnId;stopSpeech();if(stop)return;
+  playingTurn=turnId;const generation=playback;speechController=new AbortController();button.textContent='Cancel voice';
   try {
-    const response=await fetch('/api/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,1800),format:'pcm'})});
+    const response=await fetch('/api/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,format:'pcm'}),signal:speechController.signal});
     if(!response.ok) throw new Error('Speech is unavailable. Your text reply is still here.');
-    const url=URL.createObjectURL(new Blob([pcmWav(await response.arrayBuffer())],{type:'audio/wav'}));
-    playingUrl=url;playing=new Audio(url); playing.onended=()=>URL.revokeObjectURL(url);
+    const pcm=await response.arrayBuffer();if(generation!==playback)return;
+    const url=URL.createObjectURL(new Blob([pcmWav(pcm)],{type:'audio/wav'}));
+    playingUrl=url;playing=new Audio(url);playing.onended=()=>{if(generation===playback)stopSpeech();};
+    playing.onerror=()=>{if(generation===playback){$('error').textContent='Playback stopped. Your text reply is still here.';stopSpeech();}};
+    document.querySelectorAll('[data-voice]').forEach(b=>{if(b.dataset.voice===turnId)b.textContent='Stop';});
     await playing.play();
-  } catch(e) { $('error').textContent=e.message; }
-  finally { button.disabled=false;button.textContent='Listen'; }
+  } catch(e) { if(generation===playback){if(e.name!=='AbortError')$('error').textContent=e.message;stopSpeech();} }
 }
 function renderTurns() {
   const signature=JSON.stringify(turns); if(signature===lastTurns)return;lastTurns=signature;
@@ -67,7 +74,7 @@ function renderTurns() {
     const card=el('article',undefined,'turn'),head=el('div',undefined,'turn-heading');
     head.append(el('strong',turn.target.name),el('span',labels[turn.state]||turn.state,'state-'+turn.state));card.append(head);
     card.append(el('p',turn.text||'Voice message'));
-    if(turn.reply){card.append(el('p',turn.reply,'reply'));const b=el('button','Listen','listen');b.onclick=()=>listen(turn.reply,b);card.append(b);}
+    if(turn.reply){card.append(el('p',turn.reply,'reply'));const b=el('button',playingTurn===turn.id?(playing?'Stop':'Cancel voice'):'Listen','listen');b.dataset.voice=turn.id;b.onclick=()=>listen(turn.reply,b,turn.id);card.append(b);}
     if(turn.output){const d=el('details'),summary=el('summary','Latest terminal output');d.append(summary,el('pre',turn.output));card.append(d);}
     if(turn.error)card.append(el('p',turn.error,'error'));
     list.append(card);
@@ -75,8 +82,9 @@ function renderTurns() {
   renderWatch();
 }
 function renderWatch() {
+  const target=targets.find(t=>t.id===selected);
   const current=turns.find(t=>t.target.id===selected);
-  $('watch-state').textContent=current?(labels[current.state]||current.state).toUpperCase():'READY';
+  $('watch-state').textContent=(target&&!target.available?(labels[target.status]||target.status):current?(labels[current.state]||current.state):'READY').toUpperCase();
 }
 async function refresh() {
   if(refreshBusy)return;refreshBusy=true;
@@ -90,7 +98,7 @@ async function refresh() {
       }
     }
     renderTargets();
-    if(selected&&!targets.some(t=>t.id===selected)){selected='';$('recipient').textContent='Select a conversation';}
+    if(selected&&!targets.some(t=>t.id===selected))choose('');
     if(selected) choose(selected);
     $('send').disabled=sending||!targets.find(t=>t.id===selected)?.available;
     $('warnings').replaceChildren(...agents.warnings.map(w=>el('p',w)));

@@ -1,0 +1,9 @@
+Kokoro v1.0 (82M), hexgrad / rzvzn. Model license: Apache-2.0.
+Model card: https://huggingface.co/hexgrad/Kokoro-82M
+ONNX int8 export and voices: https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0
+Wrapper: kokoro-onnx 0.6.1, MIT, copyright 2025 github.com/thewh1teagle.
+
+The upstream model card credits training audio from:
+Koniwa tnc, CC BY 3.0: https://github.com/koniwa/koniwa
+SIWIS, CC BY 4.0: https://datashare.ed.ac.uk/handle/10283/2353
+See the model card for full training-data acknowledgments. Maestro does not include or redistribute that training audio.

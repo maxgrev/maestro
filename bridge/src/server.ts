@@ -8,6 +8,7 @@ import { requestId } from './service.js';
 import { UserError } from './types.js';
 import type { Onboarding } from './onboarding.js';
 import { AgentSetup } from './agent-setup.js';
+import { voices } from './speech.js';
 
 function tokenMatches(header: string | undefined, token: string | undefined) {
   if (!token || !header?.startsWith('Bearer ')) return false;
@@ -62,8 +63,10 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     return service.reply(b.request_id, b.text, b.needs_attention);
   });
   app.post('/api/speech', async (req, reply) => {
-    const b = z.object({ text: z.string().trim().min(1).max(1800), format: z.enum(['pcm', 'mp3']).default('pcm') }).strict().parse(req.body);
-    const audio = await service.speech.speak(b.text, b.format);
+    const b = z.object({ text: z.string().trim().min(1).max(16000), format: z.enum(['pcm', 'mp3']).default('pcm'),
+      voice: z.string().refine(v => voices.some(x => x.id === v)).optional() }).strict().parse(req.body);
+    const audio = service.speech.stream ? service.speech.stream(b.text, b.format, b.voice) : await service.speech.speak(b.text, b.format, b.voice);
+    if ('destroy' in audio) reply.raw.once('close', () => audio.destroy());
     return reply.type(b.format === 'pcm' ? 'audio/pcm' : 'audio/mpeg').send(audio);
   });
   if (options.local) {

@@ -6,6 +6,7 @@ import { hostname } from 'node:os';
 import { z } from 'zod';
 import { configSchema, localDir, type Config } from './config.js';
 import { UserError } from './types.js';
+import { voices } from './speech.js';
 
 export type DeviceResult = Record<string, unknown>;
 export type DeviceRunner = (input: Record<string, unknown>, progress: (message: string) => void) => Promise<DeviceResult>;
@@ -54,6 +55,7 @@ export class Onboarding {
     return { ...devices, job: this.job, device: this.device,
       muse: existsSync(resolve(this.data, 'muse-sdk-token')),
       grok: !!this.config.grok, projects: this.config.projects, agents: this.config.agents,
+      voices, voice: this.config.speech.engine === 'kokoro' ? this.config.speech.neuralVoice ?? 'af_heart' : 'Samantha',
       firmware: existsSync(resolve(process.env.MAESTRO_FIRMWARE ?? 'firmware/build/sdk/esp32/build-maestro', 'maestro-manifest.json')),
     };
   }
@@ -89,15 +91,20 @@ export class Onboarding {
       muse: z.string().regex(/^mgst_\S{8,480}$/).optional(),
       grok: z.object({ webhook: configSchema.shape.grok.unwrap().shape.webhook, key: z.string().min(1).max(500) }).strict().optional(),
       project: z.object({ name: z.string().min(1).max(60), path: z.string().startsWith('/'), trusted: z.boolean().optional() }).strict().optional(),
+      voice: z.string().refine(v => voices.some(x => x.id === v)).optional(),
     }).strict().parse(body);
     if (this.job?.state === 'working') throw new UserError('Wait for the device step to finish before saving agents.', 409);
     if (input.project && !statSync(input.project.path, { throwIfNoEntry: false })?.isDirectory()) throw new UserError('Choose an existing project folder.');
     const next = configSchema.parse({ ...this.config,
+      ...(input.voice ? { speech: { ...this.config.speech, engine: input.voice === 'Samantha' ? 'macos' : 'kokoro', ...(input.voice === 'Samantha' ? {} : { neuralVoice: input.voice }) } } : {}),
       ...(input.grok ? { grok: { ...input.grok, name: 'Grok Bot', replyKey: this.config.grok?.replyKey ?? randomBytes(32).toString('hex') } } : {}),
       ...(input.project ? { projects: [{ ...input.project, id: 'default' }] } : {}),
     });
     if (input.muse) this.write('muse-sdk-token', input.muse + '\n');
     this.write('config.json', JSON.stringify(next, null, 2) + '\n');
+    // Speech keeps this object by reference so a voice change applies at once.
+    Object.assign(this.config.speech, next.speech);
+    next.speech = this.config.speech;
     Object.assign(this.config, next);
     return { saved: true };
   }

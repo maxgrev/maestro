@@ -25,6 +25,8 @@ The device has two programmable buttons and a power button. Yellow handles talk,
 
 Characters identify providers through shape as well as color. Muse retains its SDK character; the others use the same canvas, frame timing, and reply layouts. Expression follows real voice state. No extra animation engine or image download is needed.
 
+Agents → Voice offers four local Kokoro voices and the previous macOS voice. Preview works before saving, and the saved choice applies to the next reply. Conversation playback has Cancel and Stop controls. The native app audit checked previews, voice selection, saved settings, playback cancellation, and provider characters. It caught an oversized Grok list icon and a false Ready label for agents awaiting sign-in; both were fixed. Phone and tablet layouts and reduced-motion rendering still need a browser check; the browser tool could not inspect its stale error tab. The app currently has one dark theme.
+
 The bridge stopped between development sessions, which made the original device appear Muse-only. The Mac app now owns the bridge process and stays alive when its window closes. It reuses an existing bridge if one already owns the ports. The device retries discovery after Wi-Fi connects and shows a Mac-offline message when needed.
 
 Still required before a broad release: Developer ID signing and notarization, a clean second-Mac test, bundled-license distribution review, fresh Claude/Pi sign-in checks, human speaker-quality and battery tests. Muse's phone app and Grok's routine UI still own their account and consent steps. Do not advertise fully automatic provider setup or arbitrary existing desktop-chat access.

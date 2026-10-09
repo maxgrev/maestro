@@ -1,0 +1,15 @@
+# Kokoro CPU runtime. Keep model downloads separate and checksum-pinned.
+kokoro-onnx==0.6.1
+espeakng-loader==0.2.4
+numpy==2.5.3
+onnxruntime==1.31.0
+flatbuffers==25.12.19
+packaging==26.3
+protobuf==7.36.2
+phonemizer==3.4.0
+joblib==1.6.0
+cloudpickle==3.1.2
+attrs==26.1.0
+dlinfo==2.0.0
+typing_extensions==4.16.0
+soxr==1.0.0
