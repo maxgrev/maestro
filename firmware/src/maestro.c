@@ -1,5 +1,8 @@
 #include "maestro.h"
 #include "maestro_settings.h"
+#include "maestro_avatar.h"
+#include "maestro_reply.h"
+#include "muse_settings.h"
 #include "muse_ui.h"
 #include "esp_system.h"
 #include "nvs.h"
@@ -38,6 +41,7 @@ static atomic_uint s_gen;
 static atomic_bool s_switch, s_refresh;
 static atomic_bool s_selection_changed;
 static atomic_bool s_bridge_online, s_picker_open, s_settings_open, s_reboot;
+static atomic_bool s_reader_open;
 static atomic_int s_character;
 static size_t s_focus;
 static lv_obj_t *s_row_buttons[TARGET_MAX], *s_list_note;
@@ -49,6 +53,7 @@ static size_t s_frames;
 static bool s_overflow;
 static char *s_caption; // Full UTF-8 reply lives in PSRAM, leaving internal RAM for audio DMA.
 static uint32_t s_caption_gen;
+static maestro_reply_t s_reply;
 static lv_obj_t *s_label, *s_panel, *s_rows;
 static atomic_uint s_list_version;
 static uint32_t s_shown_version;
@@ -245,6 +250,10 @@ static void run_job(job_t *job)
             if (!strcmp(state, "done") || !strcmp(state, "needs_attention")) {
                 char *reply = strdup(field(response, "reply"));
                 xSemaphoreTake(s_lock, portMAX_DELAY);
+                if (job->gen != atomic_load(&s_gen)) {
+                    xSemaphoreGive(s_lock);
+                    free(reply); cJSON_Delete(response); return;
+                }
                 cJSON *target = cJSON_GetObjectItem(response, "target");
                 const char *id = field(target, "id");
                 if (!strncmp(job->target, "new:", 4) && !strcmp(s_selected.id, job->target)
@@ -257,7 +266,7 @@ static void run_job(job_t *job)
                     atomic_store(&s_selection_changed, true);
                     atomic_store(&s_refresh, true);
                 }
-                text_copy(s_caption, reply ? reply : "", CAPTION_BYTES);
+                maestro_reply_update(&s_reply, 0, reply ? reply : "", true);
                 s_caption_gen = job->gen;
                 xSemaphoreGive(s_lock);
                 emit(job->gen, MUSE_HATCH_EV_REPLY, reply);
@@ -265,7 +274,7 @@ static void run_job(job_t *job)
                 bool spoken = reply && speak_reply(job->gen, reply);
                 free(reply);
                 if (!spoken && job->gen == atomic_load(&s_gen)) {
-                    emit(job->gen, MUSE_HATCH_EV_ERROR, "Speech stopped. Full reply is in Maestro.");
+                    emit(job->gen, MUSE_HATCH_EV_ERROR, "Speech stopped. Tap Read reply.");
                     return;
                 }
                 emit(job->gen, MUSE_HATCH_EV_DONE, "");
@@ -308,6 +317,7 @@ void maestro_init(void)
     s_nav = psram_queue(8, sizeof(unsigned));
     s_caption = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
     configASSERT(s_lock && s_jobs && s_events && s_audio && s_caption);
+    s_reply = (maestro_reply_t){.text = s_caption, .capacity = CAPTION_BYTES};
     s_targets[0] = (target_t){.id = "muse", .name = "Muse", .detail = "Your daily assistant", .available = true};
     s_selected = s_targets[0]; s_count = 1;
     nvs_handle_t handle;
@@ -362,6 +372,7 @@ void maestro_begin(void)
     free(s_capture); s_capture = NULL; s_frames = 0; s_overflow = false;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_record_target = s_selected;
+    maestro_reply_clear(&s_reply);
     xSemaphoreGive(s_lock);
     s_native = !strcmp(s_record_target.id, "muse");
     if (s_native) muse_hatch_turn_begin();
@@ -446,6 +457,20 @@ bool maestro_caption(size_t played, char *out, size_t cap)
 }
 void maestro_resting(bool resting) { muse_hatch_set_resting(resting); }
 
+uint32_t maestro_reply_generation(void) { return atomic_load(&s_gen); }
+void maestro_muse_reply(uint32_t gen, unsigned message, const char *text, bool final)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (gen == atomic_load(&s_gen) && !strcmp(s_selected.id, "muse")) {
+        maestro_reply_update(&s_reply, message, text, final);
+        s_caption_gen = gen;
+    }
+    xSemaphoreGive(s_lock);
+}
+
+#include "maestro_reader.inc"
+#include "maestro_thumbnails.inc"
+
 static void close_list(void)
 {
     lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
@@ -477,11 +502,15 @@ static void select_target(const target_t *target)
         bool changed = strcmp(s_selected.id, target->id) != 0;
         s_selected = *target;
         if (changed) remember_target(target);
+        if (changed) {
+            // Invalidate in-flight replies before the voice task handles cancellation.
+            atomic_fetch_add(&s_gen, 1);
+            maestro_reply_clear(&s_reply);
+        }
         atomic_store(&s_character, target->character);
         session_label();
         if (mode == MUSE_MODE_THINKING || mode == MUSE_MODE_SPEAKING) atomic_store(&s_switch, true);
         else if (changed) {
-            s_caption[0] = 0;
             muse_state_set_caption("%s", "");
             muse_state_set_mode(MUSE_MODE_IDLE);
         }
@@ -521,6 +550,10 @@ static void list_render(void)
         lv_obj_set_size(button, lv_pct(100), 68);
         lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(s_targets[i].id, s_selected.id) ? 0x2e2552 : 0x1a1530), 0);
         lv_obj_set_style_radius(button, 18, 0);
+        lv_obj_set_style_pad_hor(button, 10, 0);
+        lv_obj_t *portrait = lv_image_create(button);
+        lv_image_set_src(portrait, &s_portraits[target->character]);
+        lv_obj_align(portrait, LV_ALIGN_LEFT_MID, -4, 0);
         if (!strcmp(target->id, s_selected.id)) {
             lv_obj_t *selected = lv_label_create(button);
             lv_obj_set_style_text_font(selected, &lv_font_montserrat_14, 0);
@@ -530,17 +563,17 @@ static void list_render(void)
         }
         lv_obj_t *label = lv_label_create(button);
         // Dots mode needs a fixed height to keep long session names on one line.
-        lv_obj_set_size(label, 230, lv_font_get_line_height(&lv_font_montserrat_20));
+        lv_obj_set_size(label, 204, lv_font_get_line_height(&lv_font_montserrat_20));
         lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(label, s_targets[i].name);
-        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 0, -2);
+        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 60, -2);
         lv_obj_t *detail = lv_label_create(button);
         lv_obj_set_style_text_font(detail, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(detail, lv_color_hex(target->available ? 0xb7c9c1 : 0xd7b98b), 0);
-        lv_obj_set_size(detail, 230, lv_font_get_line_height(&lv_font_montserrat_14));
+        lv_obj_set_size(detail, 204, lv_font_get_line_height(&lv_font_montserrat_14));
         lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(detail, target->available ? target->detail : target->status);
-        lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+        lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 60, 0);
         lv_obj_add_event_cb(button, choose, LV_EVENT_CLICKED, target);
         lv_obj_add_event_cb(button, row_deleted, LV_EVENT_DELETE, target);
     }
@@ -556,6 +589,7 @@ static void open_list(lv_event_t *event)
     (void)event;
     float secs;
     if (muse_state_mode(&secs) == MUSE_MODE_LISTENING) return;
+    close_reader(NULL);
     if (!lv_obj_has_flag(s_panel, LV_OBJ_FLAG_HIDDEN)) { close_list(); return; }
     muse_ui_show_face();
     muse_ui_set_swipe_enabled(false);
@@ -573,22 +607,27 @@ static void ui_tick(lv_timer_t *timer)
     (void)timer;
     unsigned key = 0;
     xQueueReceive(s_nav, &key, 0);
+    reader_tick();
+    if (key == 6) open_reader(NULL);
     if (key == 5) open_list(NULL);
     bool settings = !atomic_load(&s_picker_open) && maestro_ui_settings_is_open();
     maestro_settings_visible(settings);
     if (key == 3) {
-        if (atomic_load(&s_picker_open)) close_list();
+        if (atomic_load(&s_reader_open)) close_reader(NULL);
+        else if (atomic_load(&s_picker_open)) close_list();
         else if (settings) maestro_settings_key(3);
         else maestro_ui_open_settings();
     }
-    if (key == 4) { close_list(); maestro_ui_open_settings(); }
+    if (key == 4) { close_reader(NULL); close_list(); maestro_ui_open_settings(); }
     if (key == 1) {
-        if (settings) maestro_settings_key(1);
+        if (atomic_load(&s_reader_open)) reader_page(1);
+        else if (settings) maestro_settings_key(1);
         else if (!atomic_load(&s_picker_open)) open_list(NULL);
         else if (s_visible_count) { s_focus = (s_focus + 1) % s_visible_count; focus_row(); }
     }
     if (key == 2) {
-        if (settings) maestro_settings_key(2);
+        if (atomic_load(&s_reader_open)) reader_page(-1);
+        else if (settings) maestro_settings_key(2);
         else if (atomic_load(&s_picker_open) && s_focus < s_visible_count) select_target(&s_visible[s_focus]);
     }
     if (atomic_exchange(&s_selection_changed, false)) {
@@ -604,7 +643,9 @@ static void ui_tick(lv_timer_t *timer)
     lv_obj_set_flag(s_label, LV_OBJ_FLAG_HIDDEN, muse_state_mode(&secs) != MUSE_MODE_IDLE || caption[0]);
 }
 void maestro_show_agents(void) { navigate(5); }
+void maestro_show_reply(void) { navigate(6); }
 bool maestro_picker_is_open(void) { return atomic_load(&s_picker_open); }
+bool maestro_reader_is_open(void) { return atomic_load(&s_reader_open); }
 void maestro_settings_visible(bool visible) { atomic_store(&s_settings_open, visible); }
 int maestro_character(void) { return atomic_load(&s_character); }
 const char *maestro_idle_label(void)
@@ -615,7 +656,7 @@ const char *maestro_idle_label(void)
 }
 bool maestro_confirm(void)
 {
-    if (!atomic_load(&s_picker_open) && !atomic_load(&s_settings_open)) return false;
+    if (!atomic_load(&s_picker_open) && !atomic_load(&s_settings_open) && !atomic_load(&s_reader_open)) return false;
     navigate(2); return true;
 }
 void maestro_aux(bool pressed, bool edge)
@@ -647,6 +688,18 @@ bool maestro_console(const char *line, bool whole)
     else if (!strcmp(line, "maestro.confirm")) maestro_confirm();
     else if (!strcmp(line, "maestro.settings")) navigate(4);
     else if (!strcmp(line, "maestro.back")) navigate(3);
+    else if (!strcmp(line, "maestro.reply")) maestro_show_reply();
+#if CONFIG_LV_USE_SNAPSHOT
+    else if (!strncmp(line, "maestro.preview=", 16)) {
+        // USB bench preview, alongside the SDK's face= and screenshot commands.
+        // Never sends a message or changes the selected agent.
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        maestro_reply_clear(&s_reply);
+        maestro_reply_update(&s_reply, 0, line + 16, true);
+        s_caption_gen = atomic_fetch_add(&s_gen, 1) + 1;
+        xSemaphoreGive(s_lock);
+    }
+#endif
     else if (!strncmp(line, "maestro.setup=", 14)) {
         bool ok = maestro_settings_save(line + 14);
         printf("@maestro.setup {\"ok\":%s}\n", ok ? "true" : "false");
@@ -658,10 +711,14 @@ bool maestro_console(const char *line, bool whole)
         cJSON_AddBoolToObject(json, "bridge", atomic_load(&s_bridge_online));
         cJSON_AddBoolToObject(json, "picker", atomic_load(&s_picker_open));
         cJSON_AddBoolToObject(json, "settings", atomic_load(&s_settings_open));
+        cJSON_AddBoolToObject(json, "reader", atomic_load(&s_reader_open));
+        cJSON_AddNumberToObject(json, "readerScroll", atomic_load(&s_reader_y));
+        cJSON_AddNumberToObject(json, "readerRemaining", atomic_load(&s_reader_remaining));
         xSemaphoreTake(s_lock, portMAX_DELAY);
         cJSON_AddStringToObject(json, "selected", s_selected.id);
         cJSON_AddStringToObject(json, "name", s_selected.name);
         cJSON_AddNumberToObject(json, "agents", s_count);
+        cJSON_AddNumberToObject(json, "replyBytes", s_reply.length);
         xSemaphoreGive(s_lock);
         char *text = cJSON_PrintUnformatted(json);
         if (text) printf("@maestro.status %s\n", text);
@@ -677,11 +734,12 @@ void maestro_menu_icons(lv_obj_t *parent)
         lv_obj_set_style_text_font(icon, &lv_font_montserrat_28, 0);
         lv_obj_set_style_text_color(icon, lv_color_hex(i ? 0x658cff : 0xe8cb65), 0);
         lv_label_set_text(icon, i ? LV_SYMBOL_DOWN : LV_SYMBOL_OK);
-        lv_obj_align(icon, LV_ALIGN_CENTER, i ? 146 : -146, -146);
+        lv_obj_align(icon, LV_ALIGN_CENTER, i ? 128 : -128, -138);
     }
 }
 void maestro_ui_build(lv_obj_t *parent)
 {
+    portraits_build();
     s_label = lv_label_create(parent);
     lv_obj_set_style_text_font(s_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(s_label, lv_color_hex(0xb7b0cc), 0);
@@ -711,7 +769,7 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_set_style_text_letter_space(title, 2, 0);
     lv_label_set_text(title, "AGENTS"); lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 44);
     s_rows = lv_obj_create(s_panel);
-    lv_obj_set_size(s_rows, 310, 234); lv_obj_align(s_rows, LV_ALIGN_TOP_MID, 0, 120);
+    lv_obj_set_size(s_rows, 340, 234); lv_obj_align(s_rows, LV_ALIGN_TOP_MID, 0, 120);
     lv_obj_set_style_pad_all(s_rows, 0, 0); lv_obj_set_style_border_width(s_rows, 0, 0);
     lv_obj_set_style_bg_opa(s_rows, LV_OPA_TRANSP, 0);
     lv_obj_set_flex_flow(s_rows, LV_FLEX_FLOW_COLUMN);
@@ -723,5 +781,6 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_list_note, &lv_font_montserrat_14, 0);
     lv_obj_align(s_list_note, LV_ALIGN_TOP_MID, 0, 396);
     lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
+    reader_build(parent);
     lv_timer_create(ui_tick, 70, NULL);
 }

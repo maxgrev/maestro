@@ -10,6 +10,10 @@
 @media(max-width:950px){.setup-layout{gap:36px;margin:25px 28px 60px;grid-template-columns:minmax(230px,.8fr) minmax(0,1.2fr)}}
 @media(max-width:680px){.setup-layout{display:block;margin:16px 22px 44px}.setup-intro{position:static}.setup-intro h1{font-size:35px}.setup-intro h1 br{display:none}.setup-intro>p{max-width:none}.control-guide,.controls{display:none}.setup-steps{margin:28px 0;gap:0;justify-content:space-between}.setup-workspace h2{font-size:26px}.agent-setup summary span{font-size:12px}.setup-workspace>section{min-height:350px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+/* Match the device's shared status row and inset button hints. */
+.guide-agent{position:absolute;top:36px}
+.guide-talk{left:32px}.guide-list{right:32px}
+.guide-face .companion{margin-top:54px}
 /* Reuse the same character art as the StopWatch. */
 .companion.codex,.companion.claude,.companion.pi{width:80px;height:87px;border:0;border-radius:0;background-color:transparent;display:block;image-rendering:auto}
 .companion.codex:before,.companion.claude:before,.companion.pi:before,.companion.codex i,.companion.claude i,.companion.pi i,.companion.codex b,.companion.claude b,.companion.pi b{display:none}

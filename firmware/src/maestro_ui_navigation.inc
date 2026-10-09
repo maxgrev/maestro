@@ -5,6 +5,11 @@ static void maestro_agents_clicked(lv_event_t *event)
     (void)event;
     maestro_show_agents();
 }
+static void maestro_reply_clicked(lv_event_t *event)
+{
+    (void)event;
+    maestro_show_reply();
+}
 
 bool maestro_ui_settings_is_open(void)
 {

@@ -17,6 +17,7 @@
 #define FRAME_PIXELS (CODEX_WIDTH * CODEX_HEIGHT)
 static uint16_t *pixels, *frame;
 static bool active;
+static int preview_character = -1;
 static uint16_t color(unsigned c) { return ((c >> 8) & 0xf800) | ((c >> 5) & 0x07e0) | ((c >> 3) & 0x1f); }
 static void box(int x, int y, int w, int h, unsigned c)
 {
@@ -120,7 +121,8 @@ static void pi(const muse_pose_t *p)
 }
 bool maestro_avatar_render(const muse_pose_t *p)
 {
-    int who = maestro_character(); active = who != 0;
+    int who = preview_character < 0 ? maestro_character() : preview_character;
+    active = who != 0;
     if (!active) return false;
     if (!pixels) pixels = heap_caps_calloc(SIDE*SIDE, sizeof(*pixels), MUSE_BIG_CAPS);
     if (!frame) frame = heap_caps_calloc(FRAME_PIXELS, sizeof(*frame), MUSE_BIG_CAPS);
@@ -131,6 +133,15 @@ bool maestro_avatar_render(const muse_pose_t *p)
     else if (who == 3) clawd(p);
     else pi(p);
     return true;
+}
+void maestro_avatar_snapshot(int character, uint16_t *dst)
+{
+    const muse_pose_t pose = {.mode = MUSE_MODE_IDLE, .t = 1, .mode_t = 1};
+    preview_character = character;
+    muse_pixel_render(&pose);
+    muse_pixel_set_size(SIDE);
+    muse_pixel_scale(dst, SIDE, 0, SIDE - 1, 0, SIDE - 1);
+    preview_character = -1;
 }
 bool maestro_avatar_scale(uint16_t *dst, int stride, int x0, int x1, int y0, int y1, int size)
 {

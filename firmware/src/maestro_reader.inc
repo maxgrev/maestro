@@ -1,0 +1,161 @@
+// UI task only. The label owns a snapshot, never the worker's mutable reply.
+static lv_obj_t *s_reader, *s_reader_scroll, *s_reader_text, *s_read_button, *s_reader_note;
+static lv_obj_t *s_reader_page_buttons[2];
+static char *s_reader_copy;
+static uint32_t s_reader_version, s_auto_read_gen = UINT32_MAX;
+static uint32_t s_reader_generation;
+static atomic_int s_reader_y, s_reader_remaining;
+static void close_list(void);
+
+static void close_reader(lv_event_t *event)
+{
+    (void)event;
+    lv_obj_add_flag(s_reader, LV_OBJ_FLAG_HIDDEN);
+    atomic_store(&s_reader_open, false);
+    muse_ui_set_swipe_enabled(true);
+    muse_state_poke();
+}
+static void open_reader(lv_event_t *event)
+{
+    (void)event;
+    float seconds;
+    if (!s_reader_copy[0] || muse_state_mode(&seconds) == MUSE_MODE_LISTENING) return;
+    close_list();
+    muse_ui_show_face();
+    atomic_store(&s_reader_open, true);
+    s_auto_read_gen = atomic_load(&s_gen);
+    muse_ui_set_swipe_enabled(false);
+    lv_obj_remove_flag(s_reader, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(s_reader);
+    muse_state_poke();
+}
+static void reader_page(int direction)
+{
+    // Keep one line of context between pages. Native touch scrolling remains free.
+    int pitch = lv_font_get_line_height(&lv_font_montserrat_20) + 5;
+    int32_t y = lv_obj_get_scroll_y(s_reader_scroll);
+    int32_t target = (y / pitch + direction * 8) * pitch;
+    lv_obj_scroll_by_bounded(s_reader_scroll, 0, y - target, LV_ANIM_OFF);
+    muse_state_poke();
+}
+static void reader_page_clicked(lv_event_t *event)
+{
+    reader_page((intptr_t)lv_event_get_user_data(event));
+}
+static void reader_touched(lv_event_t *event)
+{
+    (void)event;
+    muse_state_poke();
+}
+static void reader_tick(void)
+{
+    bool changed, truncated;
+    uint32_t generation;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    changed = s_reader_version != s_reply.version;
+    if (changed) {
+        memcpy(s_reader_copy, s_reply.text, s_reply.length + 1);
+        s_reader_version = s_reply.version;
+    }
+    truncated = s_reply.truncated;
+    generation = s_caption_gen;
+    xSemaphoreGive(s_lock);
+    if (changed) {
+        int32_t y = lv_obj_get_scroll_y(s_reader_scroll);
+        lv_label_set_text_static(s_reader_text, s_reader_copy);
+        lv_obj_update_layout(s_reader_scroll);
+        lv_obj_scroll_to_y(s_reader_scroll, s_reader_copy[0] && generation == s_reader_generation ? y : 0, LV_ANIM_OFF);
+        s_reader_generation = generation;
+        lv_label_set_text(s_reader_note, truncated ? "Continues in Maestro on Mac" : "");
+    }
+    float seconds;
+    bool has_reply = s_reader_copy[0] && muse_state_mode(&seconds) != MUSE_MODE_LISTENING;
+    lv_obj_set_flag(s_read_button, LV_OBJ_FLAG_HIDDEN, !has_reply);
+    if (!has_reply && atomic_load(&s_reader_open)) close_reader(NULL);
+    if (has_reply && !muse_settings_speaker_on() && generation == atomic_load(&s_gen)
+        && s_auto_read_gen != generation && !atomic_load(&s_picker_open)
+        && !maestro_ui_settings_is_open()) open_reader(NULL);
+    int32_t y = lv_obj_get_scroll_y(s_reader_scroll), remaining = lv_obj_get_scroll_bottom(s_reader_scroll);
+    atomic_store(&s_reader_y, y);
+    atomic_store(&s_reader_remaining, remaining);
+    lv_obj_set_state(s_reader_page_buttons[0], LV_STATE_DISABLED, y <= 0);
+    lv_obj_set_state(s_reader_page_buttons[1], LV_STATE_DISABLED, remaining <= 0);
+}
+static void reader_build(lv_obj_t *face)
+{
+    s_reader_copy = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
+    configASSERT(s_reader_copy);
+    s_read_button = lv_button_create(face);
+    lv_obj_remove_style_all(s_read_button);
+    lv_obj_set_size(s_read_button, 154, 38);
+    lv_obj_align(s_read_button, LV_ALIGN_TOP_MID, 0, 407);
+    lv_obj_set_style_text_color(s_read_button, lv_color_hex(0xa77dff), 0);
+    lv_obj_set_style_text_opa(s_read_button, LV_OPA_60, LV_STATE_PRESSED);
+    lv_obj_t *label = lv_label_create(s_read_button);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_label_set_text(label, LV_SYMBOL_FILE "  Read reply"); lv_obj_center(label);
+    lv_obj_add_event_cb(s_read_button, open_reader, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_flag(s_read_button, LV_OBJ_FLAG_HIDDEN);
+
+    s_reader = lv_obj_create(lv_screen_active());
+    lv_obj_remove_style_all(s_reader);
+    lv_obj_set_size(s_reader, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(s_reader, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(s_reader, LV_OPA_COVER, 0);
+    lv_obj_remove_flag(s_reader, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(s_reader, reader_touched, LV_EVENT_PRESSED, NULL);
+    for (int i = 0; i < 2; i++) {
+        lv_obj_t *button = lv_button_create(s_reader);
+        s_reader_page_buttons[i] = button;
+        lv_obj_remove_style_all(button);
+        lv_obj_set_size(button, 48, 48);
+        lv_obj_align(button, LV_ALIGN_CENTER, i ? 128 : -128, -138);
+        lv_obj_set_style_text_color(button, lv_color_hex(i ? 0x658cff : 0xe8cb65), 0);
+        lv_obj_set_style_text_opa(button, LV_OPA_60, LV_STATE_PRESSED);
+        lv_obj_set_style_text_opa(button, LV_OPA_30, LV_STATE_DISABLED);
+        label = lv_label_create(button);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_28, 0);
+        lv_label_set_text(label, i ? LV_SYMBOL_DOWN : LV_SYMBOL_UP); lv_obj_center(label);
+        lv_obj_add_event_cb(button, reader_page_clicked, LV_EVENT_CLICKED, (void *)(intptr_t)(i ? 1 : -1));
+    }
+    lv_obj_t *back = lv_button_create(s_reader);
+    lv_obj_remove_style_all(back);
+    lv_obj_set_size(back, 56, 48); lv_obj_align(back, LV_ALIGN_TOP_MID, -96, 36);
+    lv_obj_set_style_text_font(back, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_opa(back, LV_OPA_60, LV_STATE_PRESSED);
+    label = lv_label_create(back); lv_label_set_text(label, LV_SYMBOL_LEFT); lv_obj_center(label);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xa77dff), 0);
+    lv_obj_add_event_cb(back, close_reader, LV_EVENT_CLICKED, NULL);
+    label = lv_label_create(s_reader);
+    lv_obj_set_style_text_font(label, &lv_font_unscii_16, 0);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xa77dff), 0);
+    lv_label_set_text(label, "REPLY"); lv_obj_align(label, LV_ALIGN_CENTER, 0, -138);
+    s_reader_scroll = lv_obj_create(s_reader);
+    lv_obj_remove_style_all(s_reader_scroll);
+    // Nine whole lines plus the same bottom padding at the end of the reply.
+    lv_obj_set_size(s_reader_scroll, 314, 9 * lv_font_get_line_height(&lv_font_montserrat_20) + 8 * 5 + 8);
+    lv_obj_align(s_reader_scroll, LV_ALIGN_TOP_MID, 0, 132);
+    lv_obj_set_style_pad_right(s_reader_scroll, 14, 0);
+    lv_obj_set_style_pad_bottom(s_reader_scroll, 8, 0);
+    lv_obj_set_style_bg_opa(s_reader_scroll, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(s_reader_scroll, lv_color_black(), 0);
+    lv_obj_set_scroll_dir(s_reader_scroll, LV_DIR_VER);
+    lv_obj_remove_flag(s_reader_scroll, LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_set_scrollbar_mode(s_reader_scroll, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_bg_color(s_reader_scroll, lv_color_hex(0xa77dff), LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(s_reader_scroll, LV_OPA_COVER, LV_PART_SCROLLBAR);
+    lv_obj_set_style_width(s_reader_scroll, 4, LV_PART_SCROLLBAR);
+    lv_obj_add_event_cb(s_reader_scroll, reader_touched, LV_EVENT_SCROLL, NULL);
+    s_reader_text = lv_label_create(s_reader_scroll);
+    lv_obj_set_width(s_reader_text, 300);
+    lv_obj_set_style_text_font(s_reader_text, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_line_space(s_reader_text, 5, 0);
+    lv_obj_set_style_text_color(s_reader_text, lv_color_hex(0xeeeaf5), 0);
+    lv_label_set_long_mode(s_reader_text, LV_LABEL_LONG_MODE_WRAP);
+    lv_label_set_text_static(s_reader_text, s_reader_copy);
+    s_reader_note = lv_label_create(s_reader);
+    lv_obj_set_style_text_font(s_reader_note, &lv_font_montserrat_14, 0);
+    lv_obj_align(s_reader_note, LV_ALIGN_TOP_MID, 0, 397);
+    lv_label_set_text(s_reader_note, "");
+    lv_obj_add_flag(s_reader, LV_OBJ_FLAG_HIDDEN);
+}

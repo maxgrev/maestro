@@ -27,6 +27,8 @@ This package targets **Apple Silicon macOS**. It includes its runtimes and speec
 
 A short vibration confirms a choice. Swipe and hold-blue open the same settings page. Blue moves between controls; yellow selects, toggles, or steps a slider. Hold blue to return. Volume and mute are under Sound. The character identifies the agent; a small title distinguishes coding sessions.
 
+The picker shows each agent's character. Tap **Read reply** or the captions to open the full reply, even after playback ends. Scroll by touch, or press yellow to page up and blue to page down. Hold blue or tap the back arrow to return. Muted replies open the reader automatically. The device keeps the latest reply until you start a new message or change agents; it does not store a chat history. Replies over 64,000 bytes show a notice to continue on the Mac.
+
 Muse keeps its native animation. Codex uses its original blue companion. Claude uses the community's MIT-licensed Clawd Tank animations. Grok uses a moving black blob based on the supplied reference; Pi uses its official three-color mark. They respond to the device's state and share the SDK's display layer and captions. See [character sources and licenses](firmware/src/avatars/SOURCES.md).
 
 The device remembers the selected agent. A missing or busy saved session stays unavailable; it does not silently redirect a message to Muse. The list refreshes after Wi-Fi connects and every 15 seconds while idle. The Mac page chooses the recipient of its own messages; the device has its own selector.

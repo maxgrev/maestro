@@ -34,7 +34,7 @@ for path in (ROOT / "firmware/src").rglob("*"):
         dest.parent.mkdir(parents=True, exist_ok=True)
         copy_changed(path, dest)
 # One firmware image for every user. Credentials arrive over USB and stay in NVS.
-edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"\n        "maestro_settings.c"\n        "maestro_avatar.c"')
+edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"\n        "maestro_settings.c"\n        "maestro_avatar.c"\n        "maestro_reply.c"')
 edit(MUSE / "muse_app.c", '#include "muse_audio.h"', '#include "maestro.h"\n#include "muse_audio.h"')
 edit(MUSE / "muse_app.c", "    muse_state_init();", "    muse_state_init();\n    maestro_init();")
 edit(MUSE / "muse_ui.c", '#include "muse_state.h"', '#include "muse_state.h"\n#include "maestro.h"')
@@ -47,12 +47,25 @@ edit(MUSE / "muse_ui.c", 'static void invalidate_muse(void)\n{', '''static void 
         lv_obj_invalidate(s_canvas);
         return;
     }''')
-edit(MUSE / "muse_ui.c", "    build_overlays();", "    build_overlays();\n    maestro_ui_build(s_face ? s_face : lv_screen_active());")
+edit(MUSE / "muse_ui.c", "    build_overlays();", "    build_overlays();\n    maestro_ui_build(s_face ? s_face : lv_screen_active());\n    muse_pixel_set_size(s_canvas_px);")
 edit(MUSE / "muse_ui.c", 'muse_board->touch ? LV_SYMBOL_POWER : LV_SYMBOL_LIST', 'LV_SYMBOL_LIST')
 edit(MUSE / "muse_ui.c", '        return MODE_NAMES[MUSE_MODE_IDLE];', '        return maestro_idle_label();')
 # Use the native touch settings for both swipe and physical buttons.
 ui = MUSE / "muse_ui.c"
-edit(ui, 'static lv_obj_t *s_speaker;', 'static lv_obj_t *s_speaker;\nstatic lv_obj_t *s_mute_icon;\nstatic void maestro_agents_clicked(lv_event_t *event);')
+edit(ui, 'static lv_obj_t *s_speaker;', 'static lv_obj_t *s_speaker;\nstatic lv_obj_t *s_mute_icon;\nstatic void maestro_agents_clicked(lv_event_t *event);\nstatic void maestro_reply_clicked(lv_event_t *event);')
+edit(ui, '    lv_obj_align(s_state_lbl, LV_ALIGN_TOP_MID, 0, s_small ? 22 : 40 + s_dy);',
+     '    lv_obj_align(s_state_lbl, LV_ALIGN_CENTER, 0, -138);')
+edit(ui, 's_small ? 32 : 60 + s_dy', 's_small ? 32 : 111 + s_dy')
+edit(ui, '    s_reply_lbl = make_label(face, font, COLOR_CAPTION);', '''    s_answers[ANSWER_HEARD].top -= 20; /* Room for the full-reply control. */
+    s_reply_lbl = make_label(face, font, COLOR_CAPTION);
+    lv_obj_add_flag(s_reply_lbl, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_reply_lbl, maestro_reply_clicked, LV_EVENT_CLICKED, NULL);''')
+edit(ui, '    s_caption_lbl = make_label(face, font_pick(caption_font(), &lv_font_unscii_8), COLOR_CAPTION);', '''    s_caption_lbl = make_label(face, font_pick(caption_font(), &lv_font_unscii_8), COLOR_CAPTION);
+    lv_obj_add_flag(s_caption_lbl, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_caption_lbl, maestro_reply_clicked, LV_EVENT_CLICKED, NULL);''')
+edit(ui, 'cap_top + cap_h / 2);', 'cap_top + cap_h / 2 - 20);')
+# Reading uses Maestro's scrollable full reply; keep home geometry stable on mute.
+edit(ui, 'int layout = muse_settings_speaker_on() ? ANSWER_HEARD : ANSWER_READ;', 'int layout = ANSWER_HEARD;')
 edit(ui, '    set_mic_color(COLOR_DIM);', '    set_mic_color(0xe8cb65);')
 edit(ui, 'set_mic_color(mode == MUSE_MODE_LISTENING ? accent : COLOR_DIM);',
      'set_mic_color(mode == MUSE_MODE_LISTENING ? accent : 0xe8cb65);')
@@ -71,7 +84,7 @@ edit(ui, '    s_power_lbl = make_label(status, &lv_font_unscii_8, COLOR_DIM);', 
 edit(ui, '    bool speaker = muse_settings_speaker_on();', '''    bool speaker = muse_settings_speaker_on();
     lv_label_set_text(s_mute_icon, speaker ? "" : LV_SYMBOL_MUTE);''')
 edit(ui, '        s_dots[i] = d;', '        s_dots[i] = d;\n        lv_obj_add_flag(d, LV_OBJ_FLAG_HIDDEN);')
-edit(ui, '        bool swipe = !page || !subpage;', '        bool swipe = (!page || !subpage) && !maestro_picker_is_open();')
+edit(ui, '        bool swipe = !page || !subpage;', '        bool swipe = (!page || !subpage) && !maestro_picker_is_open() && !maestro_reader_is_open();')
 edit(ui, 'lv_obj_set_flag(s_dots[i], LV_OBJ_FLAG_HIDDEN, page && subpage);', 'lv_obj_add_flag(s_dots[i], LV_OBJ_FLAG_HIDDEN);')
 with ui.open("a") as out:
     out.write('\n#include "maestro_ui_navigation.inc"\n')
@@ -119,8 +132,8 @@ edit(MUSE / "muse_input.c", 'static void aux_key(bool pressed, bool edge)\n{',
 edit(MUSE / "muse_input.c", '        } else if (muse_menu_is_open()) {',
      '        } else if (maestro_confirm()) {\n            swallow = true;\n        } else if (muse_menu_is_open()) {')
 board = MUSE / "boards/board_m5stack_stopwatch.c"
-edit(board, '{ LV_ALIGN_CENTER, -91, -178 }', '{ LV_ALIGN_CENTER, -146, -146 }')
-edit(board, '{ LV_ALIGN_CENTER, 91, -178 }', '{ LV_ALIGN_CENTER, 146, -146 }')
+edit(board, '{ LV_ALIGN_CENTER, -91, -178 }', '{ LV_ALIGN_CENTER, -128, -138 }')
+edit(board, '{ LV_ALIGN_CENTER, 91, -178 }', '{ LV_ALIGN_CENTER, 128, -138 }')
 edit(board, 'static unsigned poll_buttons(void)\n{', '''static volatile bool s_buzz;
 void maestro_haptic(void) { s_buzz = true; }
 static unsigned poll_buttons(void)
@@ -139,7 +152,14 @@ static unsigned poll_buttons(void)
 session = MUSE / "muse_chat_session.cpp"
 edit(session, '#include "muse_chat_priv.h"', '#include "muse_chat_priv.h"\n#include "maestro.h"')
 edit(session, 'static const char *TAG = "muse_chat_session";',
-     'static const char *TAG = "muse_chat_session";\nstatic esp_http_client_handle_t s_maestro_tts;')
+     'static const char *TAG = "muse_chat_session";\nstatic esp_http_client_handle_t s_maestro_tts;\nstatic uint32_t s_maestro_reply_gen;')
+edit(session, '    s_turn.gen = gen;', '    s_turn.gen = gen;\n    s_maestro_reply_gen = maestro_reply_generation();')
+edit(session, '    m.done = true;', '''    m.done = true;
+    if (!s_turn.text && s_turn.gen == s_gen.load())
+        maestro_muse_reply(s_maestro_reply_gen, i, final_text ? final_text : "", true);''')
+edit(session, '        const char *text = cJSON_GetStringValue(cJSON_GetObjectItem(payload, "text"));', '''        const char *text = cJSON_GetStringValue(cJSON_GetObjectItem(payload, "text"));
+        if (text && text[0] && !s_turn.text && s_turn.gen == s_gen.load())
+            maestro_muse_reply(s_maestro_reply_gen, i, text, false);''')
 edit(session, "static void turn_reset_streams(void)\n{",
      "static void turn_reset_streams(void)\n{\n"
      "    if (s_maestro_tts) { esp_http_client_cleanup(s_maestro_tts); s_maestro_tts = nullptr; }")

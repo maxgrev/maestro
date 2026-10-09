@@ -1,4 +1,5 @@
 #include "muse_pixel.h"
+#include "maestro_avatar.h"
 #include <assert.h>
 #include <limits.h>
 #include <stdio.h>
@@ -46,6 +47,14 @@ static void lv_obj_invalidate(void *object)
 
 int main(void)
 {
+    for (int who = 0; who < 5; who++) {
+        character = 3;
+        maestro_avatar_snapshot(who, fresh);
+        assert(character == 3); // Picker previews must not change the recipient.
+        int painted = 0;
+        for (int i = 0; i < SIZE * SIZE; i++) painted += fresh[i] != 0;
+        assert(painted > 1000);
+    }
     muse_pixel_set_size(SIZE);
     memset(display, 0xff, sizeof(display));
     const int sequence[] = {0, 1, 0, 2, 0, 3, 0, 4, 0};

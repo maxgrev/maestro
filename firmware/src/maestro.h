@@ -8,7 +8,11 @@ extern "C" {
 void maestro_init(void);
 void maestro_ui_build(lv_obj_t *parent);
 void maestro_show_agents(void);
+void maestro_show_reply(void);
 bool maestro_picker_is_open(void);
+bool maestro_reader_is_open(void);
+uint32_t maestro_reply_generation(void);
+void maestro_muse_reply(uint32_t generation, unsigned message, const char *text, bool final);
 void maestro_settings_visible(bool visible);
 void maestro_ui_open_settings(void);
 bool maestro_ui_settings_is_open(void);
