@@ -38,6 +38,15 @@ edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"
 edit(MUSE / "muse_app.c", '#include "muse_audio.h"', '#include "maestro.h"\n#include "muse_audio.h"')
 edit(MUSE / "muse_app.c", "    muse_state_init();", "    muse_state_init();\n    maestro_init();")
 edit(MUSE / "muse_ui.c", '#include "muse_state.h"', '#include "muse_state.h"\n#include "maestro.h"')
+edit(MUSE / "muse_ui.c", 'static void invalidate_muse(void)\n{', '''static void invalidate_muse(void)
+{
+    // The native 64-cell sampler misses changes in higher-resolution characters.
+    // Reset its cache so returning to Muse also repaints the whole character.
+    if (maestro_character()) {
+        s_cells_valid = false;
+        lv_obj_invalidate(s_canvas);
+        return;
+    }''')
 edit(MUSE / "muse_ui.c", "    build_overlays();", "    build_overlays();\n    maestro_ui_build(s_face ? s_face : lv_screen_active());")
 edit(MUSE / "muse_ui.c", "    } else {\n        muse_menu_build(lv_screen_active(), s_w, s_h);\n    }",
      "    }\n    muse_menu_build(lv_screen_active(), 310, 330);")

@@ -72,8 +72,8 @@ Open [the local setup flow](http://localhost:4210/setup.html). Development comma
 ```sh
 npm run check
 npm test
-.tools/python/bin/python -m unittest discover -s scripts/tests -v
 npm run firmware:build
+.tools/python/bin/python -m unittest discover -s scripts/tests -v
 .tools/portable-python/python/bin/python3 scripts/package-mac.py
 ```
 
@@ -87,7 +87,7 @@ The guided installer stores each board's 16 MB recovery image and checksum under
 
 The older `scripts/flash.py --restore` restores this development StopWatch's original factory image from `.local/backups/stopwatch-original.bin`. Use it only with the original board. Close other serial tools first.
 
-The tests cover USB log interleaving, paced certificate transfer, board confirmation, concurrent setup writes, secret-free status, failed-write handling, project trust, callback delivery, request deduplication, restart recovery, and speech format validation. The SDK host suite passed 197 tests, with one optional dependency test skipped.
+The tests cover USB log interleaving, paced certificate transfer, board confirmation, concurrent setup writes, secret-free status, failed-write handling, project trust, callback delivery, request deduplication, restart recovery, and speech format validation. After a firmware build, the character check runs the C renderers and display damage tracker with address and undefined-behavior sanitizers. It compares 2,405 animation and agent-switch frames against fresh renders, including clipped display strips. The SDK host suite passed 197 tests, with one optional dependency test skipped.
 
 Live checks have covered Muse pairing and its physical voice path, new and existing Codex sessions, and Grok routine replies. The updated StopWatch recorded a test phrase, received the exact Codex answer, and played Kokoro audio; playback started 8.45 seconds after release in that check. Grok's lost Mac connection recovered after restarting its app; the original receipt accepted its delayed answer and a fresh request completed. The real Claude CLI passed a multipart full-reply and follow-up check against a local test server, without an account. Pi's tests cover active branches, tool output, repeated prompts, and incomplete answers. Claude and Pi account sign-in remain pending at the user's request. A clean second Mac, battery life, and human listening remain acceptance work.
 
