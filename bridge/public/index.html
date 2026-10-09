@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Maestro — Your agents, within reach</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header><a class="brand" href="/">Maestro<span class="brand-dot" aria-hidden="true"></span></a><span id="connection" role="status">Connecting…</span></header>
+  <main>
+    <section class="device-column" aria-labelledby="title">
+      <div class="intro"><h1 id="title">Your agents, <br>within reach.</h1><p>Choose a conversation. Pick up where you left off.</p></div>
+      <div class="watch" aria-label="Conversation preview">
+        <div class="watch-face"><div class="watch-status" id="watch-state">READY</div>
+          <div class="watch-agent" id="watch-agent">Maestro</div>
+          <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M20 66V34L50 60 80 34V66" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <p id="watch-caption">Tap an agent<br>to begin.</p><span class="watch-hint">HOLD TO TALK</span>
+        </div><div class="hardware-button" aria-hidden="true"></div>
+      </div>
+      <p class="device-note">StopWatch · Push-to-talk<br><span>Muse pairs directly through its phone app.</span></p>
+    </section>
+    <section class="workspace" aria-label="Agent conversations">
+      <div class="section-heading"><h2>Conversations</h2><button id="refresh" class="text-button">Refresh</button></div>
+      <div id="agents" class="agent-list"></div>
+      <div id="warnings" class="warnings" role="status"></div>
+      <form id="composer">
+        <label for="message" id="recipient">Select a conversation</label>
+        <textarea id="message" rows="3" maxlength="8000" placeholder="What would you like to do?" required></textarea>
+        <div class="composer-footer"><span id="send-hint">Messages stay with the selected agent.</span><button type="submit" id="send" disabled>Send message <span aria-hidden="true">↗</span></button></div>
+      </form>
+      <div class="section-heading activity-heading"><h2>Recent activity</h2><span id="activity-count"></span></div>
+      <div id="activity" aria-live="polite"><p class="empty">Your requests and replies will appear here.</p></div>
+      <p id="error" class="error" role="alert"></p>
+    </section>
+  </main>
+  <footer><span>Local bridge · Your Mac handles speech.</span><span>Maestro 0.1</span></footer>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

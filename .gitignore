@@ -1,0 +1,40 @@
+# Private runtime data, credentials, device backups, and local tools.
+.cache/
+.tools/
+.local/
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite-*
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+maestro_config.h
+
+# Dependencies and generated build output.
+node_modules/
+.venv/
+venv/
+dist/
+firmware/build/
+coverage/
+*.bin
+*.elf
+*.map
+*.o
+*.a
+*.tsbuildinfo
+sdkconfig.old
+__pycache__/
+*.py[cod]
+
+# Logs and local OS files.
+*.log
+.DS_Store
