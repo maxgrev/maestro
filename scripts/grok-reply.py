@@ -18,6 +18,7 @@ source.add_argument("--file", type=Path, help="UTF-8 file containing the final a
 source.add_argument("--text-base64", help="Base64-encoded UTF-8 answer, safe to pass as one shell argument")
 parser.add_argument("--local", action="store_true", help="Use this Mac's private configuration and loopback callback")
 parser.add_argument("--needs-attention", action="store_true")
+parser.add_argument("--notify", action="store_true", help="Deliver an external Grok completion to the inbox, using a stable event UUID")
 args = parser.parse_args()
 try:
     if args.text_base64 is not None:
@@ -41,12 +42,14 @@ if args.local:
             raise ValueError
     except (OSError, KeyError, ValueError, TypeError):
         sys.exit("Configure Grok Bot in this Mac's .local/config.json first.")
-    url = f"http://127.0.0.1:{port}/api/grok/reply"
+    url = f"http://127.0.0.1:{port}/api/grok/" + ("inbox" if args.notify else "reply")
 else:
     url = os.environ.get("MAESTRO_REPLY_URL", "")
     key = os.environ.get("MAESTRO_REPLY_KEY", "")
     if not url.startswith("https://") or not key:
         sys.exit("Set MAESTRO_REPLY_URL to the fixed HTTPS callback and MAESTRO_REPLY_KEY to its secret.")
+    if args.notify:
+        sys.exit("External notifications use --local with this Mac's fixed callback.")
 body = json.dumps({"request_id": str(args.request_id), "text": text, "needs_attention": args.needs_attention}).encode()
 request = Request(url, data=body, method="POST", headers={
     "Authorization": "Bearer " + key, "Content-Type": "application/json",

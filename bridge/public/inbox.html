@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Inbox — Maestro</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/setup.css"><link rel="stylesheet" href="/inbox.css"></head>
+<body>
+<header><a class="brand" href="/">Maestro</a><nav><a href="/">Conversations</a><a href="/setup.html">Setup</a></nav><span id="connection" role="status">Connecting…</span></header>
+<main class="inbox-main">
+<section id="inbox-list" aria-labelledby="inbox-title"><div class="section-heading"><h1 id="inbox-title">Inbox <span id="unread" class="unread-count"></span></h1><button id="refresh" class="text-button">Refresh</button></div>
+<p id="arrivals" role="status"></p><p id="warnings" class="warnings" role="status"></p>
+<div id="replies"><p class="empty">Loading replies…</p></div><button id="older" class="text-button" hidden>Older replies</button></section>
+<section id="reader" hidden aria-labelledby="reply-title"><button id="back" class="text-button">← Inbox</button><h1 id="reply-title" tabindex="-1"></h1><p id="reply-meta"></p><div id="reply-text" class="inbox-answer"></div></section>
+<p id="error" class="error" role="alert"></p>
+</main><script type="module" src="/inbox.js"></script></body></html>

@@ -6,6 +6,8 @@ static uint32_t s_reader_version, s_auto_read_gen = UINT32_MAX;
 static uint32_t s_reader_generation;
 static atomic_int s_reader_y, s_reader_remaining;
 static void close_list(void);
+static bool s_reader_inbox;
+static void inbox_reader_back(void);
 
 static void close_reader(lv_event_t *event)
 {
@@ -13,6 +15,7 @@ static void close_reader(lv_event_t *event)
     lv_obj_add_flag(s_reader, LV_OBJ_FLAG_HIDDEN);
     atomic_store(&s_reader_open, false);
     muse_ui_set_swipe_enabled(true);
+    if (s_reader_inbox) { s_reader_inbox = false; s_reader_version = UINT32_MAX; inbox_reader_back(); }
     muse_state_poke();
 }
 static void open_reader(lv_event_t *event)
@@ -24,6 +27,7 @@ static void open_reader(lv_event_t *event)
     muse_ui_show_face();
     atomic_store(&s_reader_open, true);
     s_auto_read_gen = atomic_load(&s_gen);
+    if (!s_reader_inbox && s_home_reply_id) inbox_ack(&s_home_reply_id, 1, true);
     muse_ui_set_swipe_enabled(false);
     lv_obj_remove_flag(s_reader, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(s_reader);
@@ -50,6 +54,13 @@ static void reader_touched(lv_event_t *event)
 }
 static void reader_tick(void)
 {
+    if (s_reader_inbox) {
+        int32_t y = lv_obj_get_scroll_y(s_reader_scroll), remaining = lv_obj_get_scroll_bottom(s_reader_scroll);
+        atomic_store(&s_reader_y, y); atomic_store(&s_reader_remaining, remaining);
+        lv_obj_set_state(s_reader_page_buttons[0], LV_STATE_DISABLED, y <= 0);
+        lv_obj_set_state(s_reader_page_buttons[1], LV_STATE_DISABLED, remaining <= 0);
+        return;
+    }
     bool changed, truncated;
     uint32_t generation;
     xSemaphoreTake(s_lock, portMAX_DELAY);

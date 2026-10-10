@@ -233,3 +233,26 @@ test('Grok submission succeeds even when coding-agent discovery cannot return', 
     assert.equal(f.store.get(id)?.state, 'working');
   } finally { await f.app.close(); f.store.close(); }
 });
+
+test('external Grok receipts use callback authority, deduplicate, and cannot read or acknowledge inbox data', async () => {
+  const f=fixture(), callback={authorization:`Bearer ${config.grok!.replyKey}`};
+  const payload={request_id:randomUUID(),text:'Work started outside Maestro has finished.'};
+  assert.equal((await f.app.inject({method:'POST',url:'/api/grok/inbox',headers:auth,payload})).statusCode,401);
+  for(let i=0;i<2;i++)assert.equal((await f.app.inject({method:'POST',url:'/api/grok/inbox',headers:callback,payload})).statusCode,200);
+  const page=(await f.app.inject({url:'/api/inbox',headers:auth})).json();
+  assert.equal(page.items.length,1);assert.equal(page.items[0].target.id,'grok');
+  assert.equal((await f.app.inject({url:'/api/inbox',headers:callback})).statusCode,401);
+  assert.equal((await f.app.inject({method:'POST',url:'/api/inbox/ack',headers:callback,payload:{ids:[page.items[0].id],kind:'read'}})).statusCode,401);
+  assert.equal((await f.app.inject({method:'POST',url:'/api/inbox/ack',headers:auth,payload:{ids:[page.items[0].id],kind:'read'}})).statusCode,200);
+  assert.deepEqual(f.store.inbox.status().alerts,[]);
+  await f.app.close();f.store.close();
+});
+
+test('watch inbox reads are bounded at a UTF-8 boundary while the Mac retains the full answer',async()=>{
+  const f=fixture(),text='界'.repeat(400);
+  const item=f.store.inbox.add({key:'long',target:{id:'muse',name:'Muse'},reply:text})!;
+  const limited=(await f.app.inject({url:`/api/inbox/${item.id}?maxBytes=1000`,headers:auth})).json();
+  assert.equal(limited.truncated,true);assert.equal(limited.reply,'界'.repeat(333));
+  const full=(await f.app.inject({url:`/api/inbox/${item.id}`,headers:auth})).json();assert.equal(full.reply,text);
+  await f.app.close();f.store.close();
+});

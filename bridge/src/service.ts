@@ -7,6 +7,7 @@ import { UserError, type Target } from './types.js';
 
 export const requestId = z.string().uuid();
 export class Service {
+  observer?: { warnings: Set<string> };
   private tasks = new Set<Promise<void>>();
   private accepting = true;
   constructor(readonly config: Config, readonly store: Store, readonly herdr: Herdr, readonly speech: SpeechEngine, private fetcher = fetch) {}
@@ -20,6 +21,9 @@ export class Service {
     const grok = this.grokTarget();
     if (grok) targets.unshift(grok);
     else warnings.push('Grok Bot needs a webhook and reply helper.');
+    for (const target of this.store.inbox.targets()) if (target.id !== 'muse' && !targets.some(t => t.id === target.id)) {
+      targets.push({ ...target, provider: 'herdr', character: target.character as Target['character'], detail: target.detail ?? '', status: 'Saved replies', available: false });
+    }
     return { targets, warnings };
   }
   async submit(id: string, targetId: string, body: string | Buffer) {

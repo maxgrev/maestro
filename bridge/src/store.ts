@@ -1,12 +1,14 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { UserError, type State, type Target, type Turn } from './types.js';
+import { Inbox } from './inbox.js';
 
 type Row = { id: string; fingerprint: string; target: string; state: State; text: string; reply: string; output: string; error: string; created: number; updated: number };
 const decode = ({ fingerprint: _fingerprint, ...row }: Row): Turn => ({ ...row, target: JSON.parse(row.target) as Target });
 
 export class Store {
   readonly db: DatabaseSync;
+  readonly inbox: Inbox;
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
@@ -15,17 +17,28 @@ export class Store {
         state TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', reply TEXT NOT NULL DEFAULT '',
         output TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, updated INTEGER NOT NULL
       );`);
+    this.inbox = new Inbox(this.db);
+    if (!this.inbox.cursor('history-imported')) {
+      for (const turn of this.list().reverse()) if (turn.reply && ['done', 'needs_attention'].includes(turn.state)) {
+        this.inbox.add({ key: `turn:${turn.id}:${turn.state}`, target: turn.target, turn: turn.id,
+          reply: turn.reply, attention: turn.state === 'needs_attention', created: turn.updated, read: true });
+      }
+      this.inbox.saveCursor('history-imported', true);
+    }
   }
   recover() {
-    this.db.prepare("UPDATE turns SET state='uncertain', error='Bridge restarted. Check the agent before sending again.', updated=? WHERE state IN ('dispatching','working')").run(Date.now());
-    this.db.prepare("UPDATE turns SET state='failed', error='Bridge restarted before submission. Record a new request.', updated=? WHERE state IN ('queued','transcribing')").run(Date.now());
+    const rows = this.db.prepare("SELECT * FROM turns WHERE state IN ('dispatching','working','queued','transcribing')").all() as Row[];
+    for (const row of rows) {
+      const sent = ['dispatching', 'working'].includes(row.state);
+      this.write(decode(row), { state: sent ? 'uncertain' : 'failed', error: sent
+        ? 'Bridge restarted. Check the agent before sending again.' : 'Bridge restarted before submission. Record a new request.' });
+    }
   }
   expireGrok(now = Date.now()) {
-    // The webhook only acknowledges receipt. A lost Mac callback must not leave
-    // the conversation reserved forever. Late authenticated replies still win.
-    this.db.prepare(`UPDATE turns SET state='uncertain', error=?, updated=?
-      WHERE state='working' AND json_extract(target, '$.provider')='grok' AND updated<=?`)
-      .run('Grok received this request, but its reply is delayed. Keep Grok Bot open on your Mac and check its computer connection. A late reply will appear here; do not resend the task.', now, now - 120_000);
+    const rows = this.db.prepare(`SELECT * FROM turns WHERE state='working'
+      AND json_extract(target, '$.provider')='grok' AND updated<=?`).all(now - 120_000) as Row[];
+    for (const row of rows) this.write(decode(row), { state: 'uncertain',
+      error: 'Grok received this request, but its reply is delayed. Keep Grok Bot open on your Mac and check its computer connection. A late reply will appear here; do not resend the task.' });
   }
   get(id: string): Turn | undefined {
     this.expireGrok();
@@ -68,13 +81,25 @@ export class Store {
       .run(id, fingerprint, JSON.stringify(target), text, now, now);
     return this.get(id)!;
   }
-  update(id: string, changes: Partial<Pick<Turn, 'state' | 'text' | 'reply' | 'output' | 'error' | 'target'>>) {
+  update(id: string, changes: Partial<Pick<Turn, 'state' | 'text' | 'reply' | 'output' | 'error' | 'target'>> & { sourceKey?: string }) {
     const current = this.get(id);
     if (!current) throw new UserError('Request not found.', 404);
-    const next = { ...current, ...changes };
-    this.db.prepare('UPDATE turns SET state=?,text=?,reply=?,output=?,error=?,target=?,updated=? WHERE id=?')
-      .run(next.state, next.text, next.reply, next.output, next.error, JSON.stringify(next.target), Date.now(), id);
-    return this.get(id)!;
+    return this.write(current, changes);
+  }
+  private write(current: Turn, changes: Partial<Turn> & { sourceKey?: string }): Turn {
+    const next = { ...current, ...changes, updated: Date.now() };
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('UPDATE turns SET state=?,text=?,reply=?,output=?,error=?,target=?,updated=? WHERE id=?')
+        .run(next.state, next.text, next.reply, next.output, next.error, JSON.stringify(next.target), next.updated, next.id);
+      if (['done', 'needs_attention', 'failed', 'uncertain'].includes(next.state)) this.inbox.add({
+        key: changes.sourceKey ?? `turn:${next.id}:${next.state}`, target: next.target, turn: next.id,
+        reply: next.reply || next.error, attention: next.state !== 'done',
+      });
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    const { sourceKey: _key, ...turn } = next;
+    return turn;
   }
   close() { this.db.close(); }
 }

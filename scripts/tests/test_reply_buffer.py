@@ -21,3 +21,12 @@ class ReplyBufferTests(unittest.TestCase):
             ], check=True, capture_output=True, text=True)
             result = subprocess.run([str(executable)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(shutil.which("cc"), "Requires a host C compiler")
+    def test_grouped_alerts_wait_for_quiet_and_do_not_repeat_on_lost_ack(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "notice"
+            subprocess.run(["cc", "-std=c11", "-fsanitize=address,undefined",
+                "-I", str(ROOT / "firmware/src"), str(ROOT / "scripts/tests/notice.c"),
+                "-o", str(executable)], check=True, capture_output=True)
+            subprocess.run([str(executable)], check=True, capture_output=True)

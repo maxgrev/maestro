@@ -27,7 +27,7 @@ This package targets **Apple Silicon macOS**. It includes its runtimes and speec
 
 A short vibration confirms a choice. Swipe and hold-blue open the same settings page. Blue moves between controls; yellow selects, toggles, or steps a slider. Hold blue to return. Volume and mute are under Sound. The character identifies the agent; a small title distinguishes coding sessions.
 
-The picker shows each agent's character and follows the round screen. Rows widen in the middle; blue brings the focused row clear of the curved edge. Tap the reply text to open the full reply, even after playback ends. Scroll by touch, or press yellow to page up and blue to page down. Hold blue or tap **Back** at the top center to return. Muted replies open the reader automatically. The device keeps the latest reply until you start a new message or change agents; it does not store a chat history. Replies over 64,000 bytes show a notice to continue on the Mac.
+The picker shows each agent's character and follows the round screen. Rows widen in the middle; blue brings the focused row clear of the curved edge. Tap the reply text to open the full reply, even after playback ends. Scroll by touch, or press yellow to page up and blue to page down. Hold blue or tap **Back** at the top center to return. Muted replies open the reader automatically. Replies stay in the Mac-backed inbox when you start another message or switch agents. Open **Agents → Inbox** for saved replies, or use **Inbox** in the Mac app. Unread badges show what remains; nearby completions share one vibration after the current voice exchange or reading ends. Background work never opens a page or starts speech. See [inbox behavior and external-agent coverage](docs/inbox.md). Replies over 64,000 bytes show a notice to continue on the Mac.
 
 Muse keeps its native animation. Codex uses its original blue companion. Claude uses the community's MIT-licensed Clawd Tank animations. Grok keeps its round silhouette and uses distinct eyes and motion for listening, thinking, speaking, errors, sleep, and happy reactions; Pi uses its official three-color mark. They respond to the device's state and share the SDK's display layer and captions. See [character sources and licenses](firmware/src/avatars/SOURCES.md).
 
@@ -37,7 +37,7 @@ The device remembers the selected agent. A missing or busy saved session stays u
 
 | Agent | Supported connection | Limits |
 | --- | --- | --- |
-| Codex | New and existing Herdr sessions. Full final replies from its read-only app-server API, bound to the exact conversation. | Sessions must be in Maestro's configured Herdr instance. A missing or ambiguous answer shows Needs you, with terminal output available. Maestro never resends it. |
+| Codex | New and existing Herdr sessions. Full final replies from its read-only app-server API, bound to the exact conversation. | Sending requires Maestro's configured Herdr instance. The inbox also reads final answers from local Codex sessions started elsewhere. A missing or ambiguous answer shows Needs you, with terminal output available. Maestro never resends it. |
 | Claude Code / Pi | Full answers from the exact native conversation: Claude's official session reader and Pi's documented session tree. New and existing Herdr sessions, with provider sign-in or Pi API keys in setup. | Sign-in is required. Claude folder trust stays in Claude. Live account checks remain pending at the user's request; local Claude protocol and Pi branch tests pass. |
 | Muse | Official Muse Gadget SDK and phone pairing. The existing Elo pairing remains intact. | Uses the SDK's current conversation. Arbitrary chat creation and selection are not implemented. Muse spoken replies use Mac speech. |
 | Grok Bot | An authenticated routine on the user's Bot. Replies return through its existing Mac connection. | Keep Grok Bot's Mac connection online. After two minutes without a reply, Maestro shows a delay and accepts a late callback without resending. History includes the last 12 complete exchanges, capped at 24,000 characters. |
@@ -52,7 +52,7 @@ The StopWatch streams 16 kHz PCM; Muse reuses the SDK's MP3 decoder. Speech no l
 
 ## Local data and networking
 
-A downloaded app uses `~/Library/Application Support/Maestro`. A development app built under this checkout reuses its existing `.local` directory. The app remembers that location. Data includes the SQLite request history, private configuration, certificate, recovery copies, and tool installs. `MAESTRO_DATA` selects another directory for command-line development.
+A downloaded app uses `~/Library/Application Support/Maestro`. A development app built under this checkout reuses its existing `.local` directory. The app remembers that location. Data includes SQLite request and inbox history, private configuration, certificate, recovery copies, and tool installs. `MAESTRO_DATA` selects another directory for command-line development.
 
 The local page uses loopback HTTP port 4210. Home connections use authenticated HTTPS port 4211 with a pinned certificate. Remote access uses Tailscale Funnel's stable HTTPS address, forwarded to an authenticated device-only origin on loopback port 4212. The setup page and its routes are absent from that origin. Never tunnel port 4210.
 

@@ -60,6 +60,11 @@ export class Herdr {
     })));
     return [...existing, ...fresh];
   }
+  async sessions() {
+    const result = await this.call(['agent', 'list']);
+    if (!Array.isArray(result.agents)) throw new Error('Herdr agent list has an unsupported shape.');
+    return result.agents.filter(a => a.agent).map(agent => ({ agent, target: this.target(agent) }));
+  }
   async prepare(target: Target, requestId: string): Promise<Target> {
     if (target.kind) {
       const project = this.config.projects.find(p => p.id === target.project);
@@ -100,7 +105,7 @@ export class Herdr {
     if (!['idle', 'done'].includes(result.agent.agent_status)) throw new UserError('The agent is busy or needs your attention. Open its app.', 409);
     return result.agent;
   }
-  async prompt(target: Target, text: string): Promise<{ state: 'done' | 'needs_attention'; reply: string; output: string; target: Target }> {
+  async prompt(target: Target, text: string): Promise<{ state: 'done' | 'needs_attention'; reply: string; output: string; target: Target; sourceKey?: string }> {
     const agent = await this.validate(target);
     const fresh = this.newCodexSessions.delete(agent.terminal_id);
     const reader = await captureReply(agent, this.call, this.config.codexBinary ?? agentBinary('codex'), fresh);
@@ -119,7 +124,7 @@ export class Herdr {
       if (attempt) await new Promise(r => setTimeout(r, 400 * 2 ** (attempt - 1)));
       clean = await reader(text, started).catch(() => undefined);
     }
-    return { state: blocked || !clean ? 'needs_attention' : 'done', output, target: this.target(result.agent),
+    return { state: blocked || !clean ? 'needs_attention' : 'done', output, target: this.target(result.agent), sourceKey: reader.sourceKey,
       reply: blocked ? `${target.name} needs your attention. Open the agent on your Mac.` : clean ?? 'The agent finished, but its answer could not be read. Open Maestro to check its output. Your request was not sent again.' };
   }
 }

@@ -25,7 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TARGET_MAX 17
+#define TARGET_MAX 33
+#define VIEW_MAX 34
 #define CAPTURE_FRAMES (16000 * 20)
 #define JSON_MAX (160 * 1024)
 #define AUDIO_FRAMES 320
@@ -36,7 +37,7 @@ typedef struct { uint32_t gen; size_t frames; int16_t pcm[AUDIO_FRAMES]; } audio
 typedef struct { uint32_t gen; int16_t *pcm; size_t frames; char target[200], id[37]; } job_t;
 static QueueHandle_t s_jobs, s_events, s_audio, s_nav;
 static SemaphoreHandle_t s_lock;
-static target_t s_targets[TARGET_MAX], s_selected, s_record_target;
+static target_t *s_targets, s_selected, s_record_target;
 static size_t s_count;
 static atomic_uint s_gen;
 static atomic_bool s_switch, s_refresh;
@@ -45,8 +46,8 @@ static atomic_bool s_bridge_online, s_picker_open, s_settings_open, s_reboot;
 static atomic_bool s_reader_open;
 static atomic_int s_character;
 static size_t s_focus;
-static lv_obj_t *s_row_buttons[TARGET_MAX], *s_list_note;
-static target_t s_visible[TARGET_MAX];
+static lv_obj_t *s_row_buttons[VIEW_MAX], *s_row_badges[VIEW_MAX], *s_list_note, *s_list_title, *s_home_badge;
+static target_t *s_visible, *s_view;
 static size_t s_visible_count;
 static bool s_native = true;
 static int16_t *s_capture;
@@ -55,6 +56,7 @@ static bool s_overflow;
 static char *s_caption; // Full UTF-8 reply lives in PSRAM, leaving internal RAM for audio DMA.
 static uint32_t s_caption_gen;
 static maestro_reply_t s_reply;
+static uint64_t s_home_reply_id;
 static lv_obj_t *s_label, *s_panel, *s_rows;
 static atomic_uint s_list_version;
 static uint32_t s_shown_version;
@@ -112,7 +114,7 @@ static esp_http_client_handle_t open_http(const char *path, const char *type, co
     esp_http_client_config_t cfg = {
         .url = url, .cert_pem = maestro_public_ca() ? NULL : maestro_ca(),
         .crt_bundle_attach = maestro_public_ca() ? esp_crt_bundle_attach : NULL,
-        .timeout_ms = !strcmp(path, "/api/speech") ? 60000 : 15000,
+        .timeout_ms = !strcmp(path, "/api/speech") ? 60000 : !strncmp(path, "/api/inbox", 10) ? 4000 : 15000,
         .disable_auto_redirect = true, .buffer_size = 4096,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
@@ -200,6 +202,8 @@ static void refresh_targets(void)
     xSemaphoreGive(s_lock);
     cJSON_Delete(json);
 }
+#include "maestro_inbox.inc"
+
 static bool speak_reply(uint32_t gen, const char *text)
 {
     esp_http_client_handle_t client = maestro_tts_open(text, "pcm");
@@ -226,7 +230,8 @@ static bool speak_reply(uint32_t gen, const char *text)
 }
 static void run_job(job_t *job)
 {
-    if (job->gen != atomic_load(&s_gen)) return;
+    // A released recording owns its destination, even if the user switches
+    // before the worker uploads it. Only playback follows the foreground.
     char path[768], escaped[601];
     static const char hex[] = "0123456789ABCDEF";
     size_t p = 0;
@@ -271,6 +276,7 @@ static void run_job(job_t *job)
                 }
                 maestro_reply_update(&s_reply, 0, reply ? reply : "", true);
                 s_caption_gen = job->gen;
+                strlcpy(s_read_turn, job->id, sizeof(s_read_turn)); s_read_turn_gen = job->gen;
                 xSemaphoreGive(s_lock);
                 emit(job->gen, MUSE_HATCH_EV_REPLY, reply);
                 cJSON_Delete(response);
@@ -290,6 +296,7 @@ static void run_job(job_t *job)
             }
             cJSON_Delete(response);
         }
+        inbox_work(); inbox_sync();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     emit(job->gen, MUSE_HATCH_EV_ERROR, "Still working. Check Maestro on Mac.");
@@ -308,16 +315,24 @@ static void worker(void *arg)
             refresh_targets();
             refreshed = esp_timer_get_time();
         }
+        float seconds;
+        if (muse_state_mode(&seconds) != MUSE_MODE_LISTENING) { inbox_work(); inbox_sync(); }
     }
 }
 void maestro_init(void)
 {
     maestro_settings_load();
     s_lock = xSemaphoreCreateMutex();
+    s_targets = heap_caps_calloc(TARGET_MAX, sizeof(target_t), MUSE_BIG_CAPS);
+    s_visible = heap_caps_calloc(VIEW_MAX, sizeof(target_t), MUSE_BIG_CAPS);
+    s_view = heap_caps_calloc(VIEW_MAX, sizeof(target_t), MUSE_BIG_CAPS);
+    s_counts = heap_caps_calloc(64, sizeof(inbox_count_t), MUSE_BIG_CAPS);
+    configASSERT(s_targets && s_visible && s_view && s_counts);
     s_jobs = psram_queue(2, sizeof(job_t));
     s_events = psram_queue(12, sizeof(event_t));
     s_audio = psram_queue(24, sizeof(audio_t));
     s_nav = psram_queue(8, sizeof(unsigned));
+    s_inbox_jobs = psram_queue(16, sizeof(inbox_job_t));
     s_caption = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
     configASSERT(s_lock && s_jobs && s_events && s_audio && s_caption);
     s_reply = (maestro_reply_t){.text = s_caption, .capacity = CAPTION_BYTES};
@@ -375,6 +390,7 @@ void maestro_begin(void)
     free(s_capture); s_capture = NULL; s_frames = 0; s_overflow = false;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_record_target = s_selected;
+    s_home_reply_id = 0;
     maestro_reply_clear(&s_reply);
     xSemaphoreGive(s_lock);
     s_native = !strcmp(s_record_target.id, "muse");
@@ -422,7 +438,10 @@ void maestro_cancel(void)
 muse_hatch_ev_t maestro_event(char *text, size_t cap)
 {
     if (atomic_exchange(&s_switch, false)) {
-        maestro_cancel();
+        // Selection already invalidated the old generation. Keep the new one
+        // so its saved-reply restore can finish after playback stops.
+        if (s_native) muse_hatch_turn_cancel();
+        free(s_capture); s_capture = NULL;
         strlcpy(text, "Agent changed. Previous work stays on Mac.", cap);
         return MUSE_HATCH_EV_ERROR;
     }
@@ -473,6 +492,7 @@ void maestro_muse_reply(uint32_t gen, unsigned message, const char *text, bool f
 
 #include "maestro_reader.inc"
 #include "maestro_thumbnails.inc"
+#include "maestro_inbox_ui.inc"
 
 static void close_list(void)
 {
@@ -496,6 +516,7 @@ static void select_target(const target_t *target)
     float secs;
     muse_mode_t mode = muse_state_mode(&secs);
     if (mode == MUSE_MODE_LISTENING) return;
+    if (inbox_choose(target)) return;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     // A refreshed list can invalidate a row while its confirmation is queued.
     bool current = false;
@@ -509,15 +530,19 @@ static void select_target(const target_t *target)
             // Invalidate in-flight replies before the voice task handles cancellation.
             atomic_fetch_add(&s_gen, 1);
             maestro_reply_clear(&s_reply);
+            s_home_reply_id = 0;
         }
         atomic_store(&s_character, target->character);
         session_label();
-        if (mode == MUSE_MODE_THINKING || mode == MUSE_MODE_SPEAKING) atomic_store(&s_switch, true);
+        if (changed && (mode == MUSE_MODE_THINKING || mode == MUSE_MODE_SPEAKING)) atomic_store(&s_switch, true);
         else if (changed) {
             muse_state_set_caption("%s", "");
             muse_state_set_mode(MUSE_MODE_IDLE);
         }
         close_list();
+        inbox_job_t restore = {.kind = INBOX_RESTORE, .gen = atomic_load(&s_gen), .ticket = atomic_fetch_add(&s_inbox_ticket, 1) + 1};
+        strlcpy(restore.target, target->id, sizeof(restore.target));
+        if (changed) inbox_queue(restore);
         maestro_haptic();
     }
     xSemaphoreGive(s_lock);
@@ -561,16 +586,24 @@ static void focus_row(void)
 }
 static void list_render(void)
 {
-    const char *note = !muse_wifi_connected() ? "Connect Wi-Fi in Settings" :
+    const char *note = s_inbox_view ? s_inbox_note : !muse_wifi_connected() ? "Connect Wi-Fi in Settings" :
         atomic_load(&s_bridge_online) ? "" : "Mac offline. Open Maestro.";
     lv_label_set_text(s_list_note, note);
     int top = note[0] ? 142 : 120;
     lv_obj_set_y(s_rows, top);
     lv_obj_set_height(s_rows, lv_obj_get_height(s_panel) - top);
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    bool unchanged = s_visible_count == s_count;
-    for (size_t i = 0; unchanged && i < s_count; i++)
-        unchanged = !memcmp(&s_visible[i], &s_targets[i], sizeof(target_t));
+    target_t *view = s_view;
+    size_t count;
+    if (s_inbox_view) { count = s_inbox_count; memcpy(view, s_inbox_rows, count * sizeof(target_t)); }
+    else {
+        view[0] = (target_t){.id = "inbox", .name = "Inbox", .character = -1, .available = true};
+        memcpy(view + 1, s_targets, s_count * sizeof(target_t)); count = s_count + 1;
+    }
+    lv_label_set_text(s_list_title, s_inbox_view ? "INBOX" : "AGENTS");
+    bool unchanged = s_visible_count == count;
+    for (size_t i = 0; unchanged && i < count; i++)
+        unchanged = !memcmp(&s_visible[i], &view[i], sizeof(target_t));
     if (unchanged) {
         // Polling the Mac must not reset a finger scroll or delete a pressed row.
         s_shown_version = atomic_load(&s_list_version);
@@ -583,12 +616,12 @@ static void list_render(void)
     if (s_focus < s_visible_count) strlcpy(focused, s_visible[s_focus].id, sizeof(focused));
     s_visible_count = 0;
     lv_obj_clean(s_rows);
-    if (!focused[0]) strlcpy(focused, s_selected.id, sizeof(focused));
-    for (size_t i = 0; i < s_count; i++) {
+    if (!focused[0]) strlcpy(focused, s_inbox_view ? "" : "inbox", sizeof(focused));
+    for (size_t i = 0; i < count; i++) {
         // The row owns its target, so a background refresh cannot change a tap's recipient.
         target_t *target = heap_caps_malloc(sizeof(*target), MUSE_BIG_CAPS);
         if (!target) continue;
-        *target = s_targets[i];
+        *target = view[i];
         s_visible[s_visible_count] = *target;
         lv_obj_t *button = lv_button_create(s_rows);
         s_row_buttons[s_visible_count++] = button;
@@ -596,7 +629,7 @@ static void list_render(void)
         lv_obj_remove_style_all(button);
         lv_obj_set_size(button, 414, 68);
         lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(s_targets[i].id, s_selected.id) ? 0x2e2552 : 0x1a1530), 0);
+        lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(target->id, s_selected.id) ? 0x2e2552 : 0x1a1530), 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(0x3c315d), LV_STATE_PRESSED);
         lv_obj_set_style_radius(button, 18, 0);
         lv_obj_set_style_pad_hor(button, 10, 0);
@@ -606,8 +639,15 @@ static void list_render(void)
         lv_obj_set_flex_flow(button, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(button, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_column(button, 8, 0);
-        lv_obj_t *portrait = lv_image_create(button);
-        lv_image_set_src(portrait, &s_portraits[target->character]);
+        if (target->character >= 0) {
+            lv_obj_t *portrait = lv_image_create(button);
+            lv_image_set_src(portrait, &s_portraits[target->character]);
+        } else {
+            lv_obj_t *icon = lv_label_create(button);
+            lv_obj_set_width(icon, 56); lv_obj_set_style_text_align(icon, LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_set_style_text_font(icon, &lv_font_montserrat_28, 0);
+            lv_label_set_text(icon, !strcmp(target->id, "inbox") ? LV_SYMBOL_ENVELOPE : LV_SYMBOL_DOWN);
+        }
         lv_obj_t *text = lv_obj_create(button);
         lv_obj_remove_style_all(text);
         lv_obj_remove_flag(text, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
@@ -617,7 +657,7 @@ static void list_render(void)
         // Dots mode needs a fixed height to keep long session names on one line.
         lv_obj_set_size(label, lv_pct(100), lv_font_get_line_height(&lv_font_montserrat_20));
         lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
-        lv_label_set_text(label, s_targets[i].name);
+        lv_label_set_text(label, target->name);
         lv_obj_align(label, target->available && !target->detail[0] ? LV_ALIGN_LEFT_MID : LV_ALIGN_TOP_LEFT, 0, 0);
         lv_obj_t *detail = lv_label_create(text);
         lv_obj_set_style_text_font(detail, &lv_font_montserrat_14, 0);
@@ -626,11 +666,12 @@ static void list_render(void)
         lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(detail, target->available ? target->detail : target->status);
         lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 0, 0);
-        if (!strcmp(target->id, s_selected.id)) {
+        {
             lv_obj_t *selected = lv_label_create(button);
+            s_row_badges[s_visible_count - 1] = selected;
             lv_obj_set_style_text_font(selected, &lv_font_montserrat_14, 0);
             lv_obj_set_style_text_color(selected, lv_color_hex(0xa77dff), 0);
-            lv_label_set_text(selected, LV_SYMBOL_OK);
+            lv_label_set_text(selected, "");
         }
         lv_obj_add_event_cb(button, choose, LV_EVENT_CLICKED, target);
         lv_obj_add_event_cb(button, row_deleted, LV_EVENT_DELETE, target);
@@ -646,7 +687,11 @@ static void open_list(lv_event_t *event)
     float secs;
     if (muse_state_mode(&secs) == MUSE_MODE_LISTENING) return;
     close_reader(NULL);
-    if (!lv_obj_has_flag(s_panel, LV_OBJ_FLAG_HIDDEN)) { close_list(); return; }
+    if (!lv_obj_has_flag(s_panel, LV_OBJ_FLAG_HIDDEN)) {
+        if (s_inbox_view) { s_inbox_view = false; s_visible_count = 0; atomic_fetch_add(&s_inbox_ticket, 1); list_render(); return; }
+        close_list(); return;
+    }
+    s_inbox_view = false;
     muse_ui_show_face();
     muse_ui_set_swipe_enabled(false);
     s_focus = 0;
@@ -663,14 +708,16 @@ static void ui_tick(lv_timer_t *timer)
     (void)timer;
     unsigned key = 0;
     xQueueReceive(s_nav, &key, 0);
+    inbox_ui_tick();
     reader_tick();
     if (key == 6) open_reader(NULL);
+    if (key == 7) inbox_open("", 0);
     if (key == 5) open_list(NULL);
     bool settings = !atomic_load(&s_picker_open) && maestro_ui_settings_is_open();
     maestro_settings_visible(settings);
     if (key == 3) {
         if (atomic_load(&s_reader_open)) close_reader(NULL);
-        else if (atomic_load(&s_picker_open)) close_list();
+        else if (atomic_load(&s_picker_open)) open_list(NULL);
         else if (settings) maestro_settings_key(3);
         else maestro_ui_open_settings();
     }
@@ -745,6 +792,7 @@ bool maestro_console(const char *line, bool whole)
     else if (!strcmp(line, "maestro.settings")) navigate(4);
     else if (!strcmp(line, "maestro.back")) navigate(3);
     else if (!strcmp(line, "maestro.reply")) maestro_show_reply();
+    else if (!strcmp(line, "maestro.inbox")) navigate(7);
 #if CONFIG_LV_USE_SNAPSHOT
     else if (!strncmp(line, "maestro.preview=", 16)) {
         // USB bench preview, alongside the SDK's face= and screenshot commands.
@@ -776,6 +824,9 @@ bool maestro_console(const char *line, bool whole)
         cJSON_AddStringToObject(json, "selected", s_selected.id);
         cJSON_AddStringToObject(json, "name", s_selected.name);
         cJSON_AddNumberToObject(json, "agents", s_count);
+        cJSON_AddNumberToObject(json, "unread", s_unread);
+        cJSON_AddNumberToObject(json, "alertGroups", s_alert_groups);
+        cJSON_AddBoolToObject(json, "inbox", s_inbox_view);
         cJSON_AddNumberToObject(json, "replyBytes", s_reply.length);
         xSemaphoreGive(s_lock);
         char *text = cJSON_PrintUnformatted(json);
@@ -813,7 +864,19 @@ lv_obj_t *maestro_back_button(lv_obj_t *parent, lv_event_cb_t callback)
 }
 void maestro_ui_build(lv_obj_t *parent)
 {
+    s_inbox_rows = heap_caps_calloc(INBOX_ROWS, sizeof(target_t), MUSE_BIG_CAPS);
+    configASSERT(s_inbox_rows);
     portraits_build();
+    s_home_badge = lv_label_create(parent);
+    lv_obj_set_style_text_font(s_home_badge, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(s_home_badge, lv_color_hex(0xeeeaf5), 0);
+    lv_obj_set_style_bg_color(s_home_badge, lv_color_hex(0x563593), 0);
+    lv_obj_set_style_bg_opa(s_home_badge, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_home_badge, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_pad_hor(s_home_badge, 5, 0);
+    lv_obj_set_style_pad_ver(s_home_badge, 2, 0);
+    lv_obj_align(s_home_badge, LV_ALIGN_CENTER, 140, -118);
+    lv_obj_add_flag(s_home_badge, LV_OBJ_FLAG_HIDDEN);
     s_label = lv_label_create(parent);
     lv_obj_set_style_text_font(s_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(s_label, lv_color_hex(0xb7b0cc), 0);
@@ -834,7 +897,7 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_remove_flag(s_panel, LV_OBJ_FLAG_SCROLLABLE);
     maestro_menu_icons(s_panel);
     maestro_back_button(s_panel, open_list);
-    lv_obj_t *title = lv_label_create(s_panel);
+    lv_obj_t *title = lv_label_create(s_panel); s_list_title = title;
     lv_obj_set_style_text_font(title, &lv_font_unscii_16, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xa77dff), 0);
     lv_obj_set_style_text_letter_space(title, 2, 0);

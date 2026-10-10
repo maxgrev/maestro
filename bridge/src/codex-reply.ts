@@ -2,7 +2,23 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 interface Item { type: string; text?: string; phase?: string; content?: { type: string; text?: string }[] }
-export interface CodexTurn { id?: string; status: string; startedAt?: number; items: Item[] }
+export interface CodexTurn { id?: string; status: string; startedAt?: number; completedAt?: number; items: Item[] }
+export interface CodexThread { id: string; name?: string | null; preview: string; cwd: string; createdAt: number; updatedAt: number }
+export type CodexRead = <T>(method: string, params: unknown) => Promise<T>;
+
+/** Page from the end so images and tool logs never precede the final answer. */
+export async function readCodexFinal(call: CodexRead, threadId: string, turnId: string): Promise<string | undefined> {
+  let cursor: string | undefined;
+  for (let page = 0; page < 8; page++) {
+    const result = await call<{ data: { item: Item }[]; nextCursor?: string }>('thread/items/list', {
+      threadId, turnId, cursor, limit: 1, sortDirection: 'desc',
+    });
+    const item = result.data[0]?.item;
+    if (item?.type === 'agentMessage' && item.phase === 'final_answer') return item.text?.trim() || undefined;
+    cursor = result.nextCursor;
+    if (!cursor) return;
+  }
+}
 
 /** Select only a completed turn with our exact input and submission time. */
 export function matchingReply(turns: CodexTurn[], input: string, since: number, before = new Set<string>()): string[] {
@@ -20,7 +36,7 @@ export function matchingReply(turns: CodexTurn[], input: string, since: number, 
  * Read-only app-server client. It never starts/resumes a thread or answers an
  * approval. Ambiguous matches fall back to the terminal view.
  */
-export async function readCodexTurns(binary: string, threadId: string): Promise<CodexTurn[]> {
+export async function withCodexReader<T>(binary: string, read: (call: CodexRead) => Promise<T>): Promise<T> {
   const child = spawn(binary, ['app-server'], { stdio: ['pipe', 'pipe', 'ignore'] });
   const lines = createInterface({ input: child.stdout });
   let id = 0, received = 0, closed = false;
@@ -51,14 +67,15 @@ export async function readCodexTurns(binary: string, threadId: string): Promise<
   try {
     await call('initialize', { clientInfo: { name: 'maestro_reply_reader', version: '0.1.0' } });
     child.stdin.write(JSON.stringify({ method: 'initialized', params: {} }) + '\n');
-    // Herdr identifies the conversation. Listing all project chats is slow and
-    // cannot bind a reply to the selected terminal when prompts are repeated.
-    const result = await call<{ data: CodexTurn[] }>('thread/turns/list', {
-      threadId, limit: 20, itemsView: 'full', sortDirection: 'desc',
-    });
-    return result.data;
+    return await read(call);
   }
   finally {
     clearTimeout(timeout); fail(); lines.close(); child.stdin.end(); child.kill();
   }
+}
+
+export async function readCodexTurns(binary: string, threadId: string): Promise<CodexTurn[]> {
+  return withCodexReader(binary, async call => (await call<{ data: CodexTurn[] }>('thread/turns/list', {
+    threadId, limit: 20, itemsView: 'summary', sortDirection: 'desc',
+  })).data);
 }

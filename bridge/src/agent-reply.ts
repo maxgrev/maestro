@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, isAbsolute } from 'node:path';
 import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk';
-import { matchingReply, readCodexTurns } from './codex-reply.js';
+import { matchingReply, readCodexTurns, readCodexFinal, withCodexReader } from './codex-reply.js';
 import { UserError } from './types.js';
 import type { Agent, HerdrCall } from './herdr.js';
 
@@ -12,7 +12,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Message = { id?: string; role?: string; content?: unknown; stop_reason?: string | null; stopReason?: string };
 export type ReplyMessage = { id: string; role: string; message: Message };
 
-function textContent(content: unknown): string {
+export function textContent(content: unknown): string {
   if (typeof content === 'string') return content;
   return Array.isArray(content) ? content.filter(c => c?.type === 'text' && typeof c.text === 'string').map(c => c.text).join('\n') : '';
 }
@@ -67,30 +67,52 @@ async function nativeSession(agent: Agent, call: HerdrCall): Promise<string> {
   throw new UserError('Reconnect this agent in Maestro so its conversation can be identified. No message was sent.', 409);
 }
 
-export type ReplyCapture = (input: string, since: number) => Promise<string | undefined>;
+export type ReplyCapture = ((input: string, since: number) => Promise<string | undefined>) & { sourceKey?: string };
+export function messageReplyKey(provider: string, session: string, message: ReplyMessage) {
+  return `${provider}:${basename(session, '.jsonl')}:${message.message.id ?? message.id}`;
+}
+export function completedMessages(messages: ReplyMessage[]) {
+  const records = new Map<string, { message: ReplyMessage; text: string; reply: string }>();
+  let input = '';
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!;
+    if (m.role === 'user' && textContent(m.message.content).trim()) input = textContent(m.message.content).trim();
+    if (m.role !== 'assistant' || !['end_turn', 'stop'].includes(m.message.stop_reason ?? m.message.stopReason ?? '')) continue;
+    const parts = m.message.id ? messages.slice(0, i + 1).filter(x => x.role === 'assistant' && x.message.id === m.message.id) : [m];
+    const reply = parts.map(x => textContent(x.message.content).trim()).filter(Boolean).join('\n\n');
+    if (reply) records.set(m.message.id ?? m.id, { message: m, text: input, reply });
+  }
+  return [...records.values()];
+}
 export async function captureReply(agent: Agent, call: HerdrCall, codex?: string, newCodexSession = false): Promise<ReplyCapture> {
   // Codex creates its first native thread only when the first prompt arrives.
   // This path is allowed solely for a fresh pane Maestro just launched, whose
   // history is known to be empty. Existing chats must bind before dispatch.
   if (newCodexSession && agent.agent === 'codex' && !agent.agent_session) {
     if (!codex) throw new UserError('Codex is unavailable.', 503);
-    return async (input, since) => {
+    const reader: ReplyCapture = async (input, since) => {
       const current = (await call(['agent', 'get', agent.pane_id])).agent;
       if (!current || current.terminal_id !== agent.terminal_id || current.agent !== 'codex') throw new Error('Codex session changed.');
       const session = await nativeSession(current, call);
       if (!uuid.test(session)) throw new Error('Invalid Codex session.');
-      const replies = matchingReply(await readCodexTurns(codex, session), input, since);
-      return replies.length === 1 ? replies[0] : undefined;
+      const turns = (await readCodexTurns(codex, session)).filter(t => matchingReply([t], input, since).length);
+      if (turns.length !== 1) return;
+      reader.sourceKey = `codex:${session}:${turns[0]!.id}`;
+      return withCodexReader(codex, call => readCodexFinal(call, session, turns[0]!.id!));
     };
+    return reader;
   }
   const session = await nativeSession(agent, call);
   if (agent.agent === 'codex') {
     if (!codex || !uuid.test(session)) throw new UserError('Codex session is unavailable. Reconnect it in Maestro.', 409);
     const before = new Set((await readCodexTurns(codex, session)).flatMap(t => t.id ? [t.id] : []));
-    return async (input, since) => {
-      const replies = matchingReply(await readCodexTurns(codex, session), input, since, before);
-      return replies.length === 1 ? replies[0] : undefined;
+    const reader: ReplyCapture = async (input, since) => {
+      const turns = (await readCodexTurns(codex, session)).filter(t => matchingReply([t], input, since, before).length);
+      if (turns.length !== 1) return;
+      reader.sourceKey = `codex:${session}:${turns[0]!.id}`;
+      return withCodexReader(codex, call => readCodexFinal(call, session, turns[0]!.id!));
     };
+    return reader;
   }
   let read: () => Promise<ReplyMessage[]>;
   if (agent.agent === 'claude') {
@@ -112,5 +134,10 @@ export async function captureReply(agent: Agent, call: HerdrCall, codex?: string
     };
   } else throw new UserError('This agent has no supported reply reader.', 409);
   const before = new Set((await read()).map(m => m.id));
-  return async input => finalReply(await read(), before, input);
+  const reader: ReplyCapture = async input => {
+    const messages = await read(), reply = finalReply(messages, before, input);
+    if (reply) reader.sourceKey = messageReplyKey(agent.agent!, session, messages.at(-1)!);
+    return reply;
+  };
+  return reader;
 }

@@ -7,6 +7,7 @@ import { Herdr } from './herdr.js';
 import { Service } from './service.js';
 import { buildServer } from './server.js';
 import { Onboarding } from './onboarding.js';
+import { Observer } from './observe.js';
 
 mkdirSync(localDir, { recursive: true, mode: 0o700 });
 chmodSync(localDir, 0o700);
@@ -28,6 +29,9 @@ try {
   await remote.listen({ host: '127.0.0.1', port: config.remotePort });
 } catch (error) { await Promise.all([local.close(), device.close(), remote.close()]); store.close(); throw error; }
 store.recover();
+const observer = new Observer(config, store.inbox, service.herdr);
+service.observer = observer;
+observer.start();
 console.log(`Maestro: http://localhost:${config.localPort}`);
 console.log(`Device HTTPS port: ${config.port}. Configuration: ${localDir}/config.json`);
 let stopping = false;
@@ -36,6 +40,7 @@ async function stop() {
   stopping = true;
   await Promise.all([local.close(), device.close(), remote.close()]);
   await service.drain();
+  await observer.stop();
   speech.close();
   store.close();
 }

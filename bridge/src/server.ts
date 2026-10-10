@@ -22,7 +22,7 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header('Content-Security-Policy', "default-src 'self'; connect-src 'self'; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
-    const callback = req.url.split('?')[0] === '/api/grok/reply';
+    const callback = ['/api/grok/reply', '/api/grok/inbox'].includes(req.url.split('?')[0] ?? '');
     if (callback) {
       if (!tokenMatches(req.headers.authorization, service.config.grok?.replyKey)) throw new UserError('Unauthorized.', 401);
       return;
@@ -42,6 +42,40 @@ export function buildServer(service: Service, options: { local?: boolean; https?
   app.addContentTypeParser('audio/pcm', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
   app.get('/api/health', async () => ({ name: 'Maestro', version: '0.2.0', speech: 'local', muse: 'Pair on the device using the Muse app' }));
   app.get('/api/targets', () => service.targets());
+  app.get('/api/inbox/status', () => ({ ...service.store.inbox.status(), warnings: [...service.observer?.warnings ?? []] }));
+  app.get('/api/inbox', req => {
+    const q = z.object({ before: z.coerce.number().int().positive().safe().optional(), target: z.string().max(250).default('') }).parse(req.query);
+    return service.store.inbox.page(q.before, q.target);
+  });
+  app.get('/api/inbox/:id', req => {
+    const { id } = z.object({ id: z.coerce.number().int().positive().safe() }).parse(req.params);
+    const { maxBytes } = z.object({ maxBytes: z.coerce.number().int().min(1000).max(64000).optional() }).parse(req.query);
+    const item = service.store.inbox.get(id);
+    if (!item) throw new UserError('Reply not found.', 404);
+    if (maxBytes) {
+      const bytes = Buffer.from(item.reply);
+      if (bytes.length > maxBytes) {
+        let end = maxBytes;
+        while ((bytes[end]! & 0xc0) === 0x80) end--;
+        return { ...item, reply: bytes.subarray(0, end).toString('utf8'), truncated: true };
+      }
+    }
+    return item;
+  });
+  app.post('/api/inbox/ack', req => {
+    const b = z.object({ ids: z.array(z.number().int().positive().safe()).max(64), kind: z.enum(['read', 'alert']) }).strict().parse(req.body);
+    service.store.inbox.acknowledge(b.ids, b.kind); return { ok: true };
+  });
+  app.post('/api/inbox/read-turn', req => {
+    const { turn } = z.object({ turn: requestId }).strict().parse(req.body);
+    service.store.inbox.readTurn(turn); return { ok: true };
+  });
+  app.post('/api/inbox/muse', req => {
+    const b = z.object({ id: z.string().min(1).max(160), text: z.string().trim().min(1).max(64000), read: z.boolean().default(false) }).strict().parse(req.body);
+    const item = service.store.inbox.add({ key: `muse:${b.id}`, target: { id: 'muse', name: 'Muse', character: 'muse' }, reply: b.text, read: b.read });
+    if (b.read && item) service.store.inbox.acknowledge([item.id], 'read');
+    return { ok: true };
+  });
   app.get('/api/turns', async () => ({ turns: service.store.list() }));
   app.get('/api/turns/:id', async req => {
     const { id } = z.object({ id: requestId }).parse(req.params);
@@ -61,6 +95,12 @@ export function buildServer(service: Service, options: { local?: boolean; https?
   app.post('/api/grok/reply', async req => {
     const b = z.object({ request_id: requestId, text: z.string().trim().min(1).max(16000), needs_attention: z.boolean().default(false) }).strict().parse(req.body);
     return service.reply(b.request_id, b.text, b.needs_attention);
+  });
+  app.post('/api/grok/inbox', req => {
+    const b = z.object({ request_id: requestId, text: z.string().trim().min(1).max(16000), needs_attention: z.boolean().default(false) }).strict().parse(req.body);
+    service.store.inbox.add({ key: `grok:${b.request_id}`, target: { id: 'grok', name: 'Grok Bot', character: 'grok' },
+      reply: b.text, attention: b.needs_attention });
+    return { ok: true };
   });
   app.post('/api/speech', async (req, reply) => {
     const b = z.object({ text: z.string().trim().min(1).max(16000), format: z.enum(['pcm', 'mp3']).default('pcm'),

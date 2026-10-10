@@ -49,8 +49,8 @@ class LocalReplyTests(unittest.TestCase):
         self.thread.join()
         self.temp.cleanup()
 
-    def run_helper(self, encoded, request_id="e1d4720a-6ca8-4c8c-a73a-e1a2f9c30b22"):
-        return subprocess.run([sys.executable, str(self.script), request_id, "--local", "--text-base64", encoded],
+    def run_helper(self, encoded, request_id="e1d4720a-6ca8-4c8c-a73a-e1a2f9c30b22", flags=()):
+        return subprocess.run([sys.executable, str(self.script), request_id, "--local", "--text-base64", encoded, *flags],
                               env={**os.environ, "HTTP_PROXY": "http://127.0.0.1:1", "NO_PROXY": ""},
                               capture_output=True, text=True, timeout=5)
 
@@ -63,6 +63,14 @@ class LocalReplyTests(unittest.TestCase):
         self.assertEqual(path, "/api/grok/reply")
         self.assertEqual(authorization, "Bearer " + "test-key-" * 8)
         self.assertEqual(body["text"], text)
+        self.assertNotIn("test-key-", result.stdout + result.stderr)
+
+    def test_external_receipt_uses_the_inbox_route_with_the_same_credential(self):
+        result = self.run_helper("RXh0ZXJuYWwgcmVwbHk=", flags=("--notify", "--needs-attention"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.requests[0][0], "/api/grok/inbox")
+        self.assertEqual(self.requests[0][2]["text"], "External reply")
+        self.assertTrue(self.requests[0][2]["needs_attention"])
         self.assertNotIn("test-key-", result.stdout + result.stderr)
 
     def test_invalid_payload_never_reaches_the_bridge(self):

@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 let targets = [], turns = [], selected = '', sending = false, lastTurns = '', lastTargets = '', playing, playingUrl, refreshBusy = false;
 let followRequest;
+let unreadCounts=[];
 let speechController, playingTurn = '', playback = 0;
 const labels = { queued:'Queued',transcribing:'Transcribing',dispatching:'Sending',working:'Working',done:'Ready',needs_attention:'Needs you',uncertain:'Check delivery',failed:'Failed' };
 function el(tag, text, cls) { const node = document.createElement(tag); if(text !== undefined) node.textContent = text; if(cls) node.className = cls; return node; }
@@ -20,7 +21,7 @@ function choose(id) {
   renderWatch();
 }
 function renderTargets() {
-  const signature=JSON.stringify([targets,selected]); if(signature===lastTargets)return;lastTargets=signature;
+  const signature=JSON.stringify([targets,selected,unreadCounts]); if(signature===lastTargets)return;lastTargets=signature;
   const focused=document.activeElement?.dataset.target;
   const list=$('agents'); list.replaceChildren();
   if(!targets.length) {
@@ -35,6 +36,8 @@ function renderTargets() {
     const character=el('span',undefined,'companion '+(target.character||'pi'));character.setAttribute('aria-hidden','true');character.append(el('i'),el('i'),el('b'));row.append(character);
     const meta=el('span',undefined,'agent-meta'); meta.append(el('span',target.name,'agent-name'),el('span',target.detail||'Existing session','agent-detail'));
     row.append(meta,el('span',target.status==='new'?'New session':labels[target.status]||target.status,'agent-status'));
+    const unread=unreadCounts.find(c=>c.target===target.id)?.unread;
+    if(unread)row.append(el('span',String(unread)+' unread','agent-status'));
     row.addEventListener('click',()=>choose(target.id)); list.append(row);
   }
   if(focused) [...list.children].find(row=>row.dataset.target===focused)?.focus();
@@ -89,7 +92,9 @@ function renderWatch() {
 async function refresh() {
   if(refreshBusy)return;refreshBusy=true;
   try {
-    const [agents,activity]=await Promise.all([api('/api/targets'),api('/api/turns')]);
+    const [agents,activity,inbox]=await Promise.all([api('/api/targets'),api('/api/turns'),api('/api/inbox/status')]);
+    unreadCounts=inbox.counts; const unread=unreadCounts.reduce((n,c)=>n+c.unread,0);
+    $('inbox-link').textContent=unread?'Inbox ('+unread+')':'Inbox';
     targets=agents.targets;turns=activity.turns;
     if(followRequest&&selected===followRequest.target){
       const created=turns.find(t=>t.id===followRequest.id);

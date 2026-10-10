@@ -71,3 +71,9 @@ Send a harmless question, confirm that the device/web page receives the answer, 
 Duplicate callbacks with the same text and status succeed without a second delivery. Conflicting callbacks fail. A lost webhook response produces an uncertain receipt and no automatic resend. A late reply can complete that receipt. A routine that never calls back remains Working; check the Bot before sending more work to it.
 
 This integration targets one configured Bot routine. It does not list arbitrary Grok app chats, create new daily-agent chats, or substitute an xAI model API conversation for your existing Bot.
+
+## External work in the inbox
+
+The same helper accepts `--notify` with a new event UUID for work started outside Maestro. It sends a deduplicated receipt to `/api/grok/inbox`, authenticated by the existing reply key. Use the same UUID and text for retries. Ordinary Maestro routine responses continue to use their original request ID without `--notify`.
+
+Save this behavior in the main Bot’s persistent instructions. This is a best-effort instruction, not a guaranteed completion hook; it only applies to that Bot. Delivery needs its Mac connection. A pending retry waits until the Bot next runs. Never place the callback key in a Bot prompt or read it from configuration. [Inbox coverage](inbox.md) describes the other agents.

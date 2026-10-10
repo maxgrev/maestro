@@ -140,25 +140,48 @@ edit(MUSE / "muse_input.c", '        } else if (muse_menu_is_open()) {',
 board = MUSE / "boards/board_m5stack_stopwatch.c"
 edit(board, '{ LV_ALIGN_CENTER, -91, -178 }', '{ LV_ALIGN_CENTER, -128, -138 }')
 edit(board, '{ LV_ALIGN_CENTER, 91, -178 }', '{ LV_ALIGN_CENTER, 128, -138 }')
-edit(board, 'static unsigned poll_buttons(void)\n{', '''static volatile bool s_buzz;
-void maestro_haptic(void) { s_buzz = true; }
+edit(board, 'static unsigned poll_buttons(void)\n{', '''static volatile unsigned s_buzz;
+void maestro_haptic(void) { s_buzz = 35; }
+void maestro_alert_haptic(void) { s_buzz = 160; }
 static unsigned poll_buttons(void)
 {
     static TickType_t buzz_until;
     if (s_buzz) {
-        s_buzz = false;
+        unsigned duration = s_buzz; s_buzz = 0;
         ioe_set(IOE_MOTOR, true);
-        buzz_until = xTaskGetTickCount() + pdMS_TO_TICKS(35);
+        buzz_until = xTaskGetTickCount() + pdMS_TO_TICKS(duration);
     } else if (buzz_until && (int32_t)(xTaskGetTickCount() - buzz_until) >= 0) {
         ioe_set(IOE_MOTOR, false);
         buzz_until = 0;
     }''')
 
+# Screen and codecs may sleep; an enabled inbox still needs its network.
+edit(MUSE / "muse_input.c", 'bool nap = paused && !muse_voice_notes_waiting()',
+     'bool nap = paused && !maestro_inbox_enabled() && !muse_voice_notes_waiting()')
 # Use the SDK's own MP3 decoder and caption pacing for native Muse replies.
 session = MUSE / "muse_chat_session.cpp"
 edit(session, '#include "muse_chat_priv.h"', '#include "muse_chat_priv.h"\n#include "maestro.h"')
 edit(session, 'static const char *TAG = "muse_chat_session";',
      'static const char *TAG = "muse_chat_session";\nstatic esp_http_client_handle_t s_maestro_tts;\nstatic uint32_t s_maestro_reply_gen;')
+# Forward complete events from the existing subscription, including when another
+# agent is selected. Never feed them into the active voice turn.
+edit(session, '    if (s_turn.phase != P_WAIT_REPLY) {\n        return;\n    }\n    const char *event', '''    const char *inbox_event = cJSON_GetStringValue(cJSON_GetObjectItem(line, "event")) ?: "";
+    cJSON *inbox_payload = cJSON_GetObjectItem(line, "payload");
+    if (!strcmp(inbox_event, "delta.message_done") ||
+        (!strcmp(inbox_event, "message.assistant") && !cJSON_IsFalse(cJSON_GetObjectItem(inbox_payload, "display_text_ready")))) {
+        const char *text = cJSON_GetStringValue(cJSON_GetObjectItem(inbox_payload, "display_text"));
+        if (!text) text = cJSON_GetStringValue(cJSON_GetObjectItem(inbox_payload, "content"));
+        bool foreground = s_turn.phase == P_WAIT_REPLY && !s_turn.text && s_turn.gen == s_gen.load()
+            && s_maestro_reply_gen == maestro_reply_generation() && maestro_character() == 0;
+        maestro_muse_inbox(msg_id(inbox_payload, line), text, foreground);
+    }
+    if (s_turn.phase != P_WAIT_REPLY) {
+        return;
+    }
+    const char *event''')
+edit(session, 's_turn.phase == P_IDLE && t - s_conn.last_use_us > IDLE_CLOSE_US',
+     's_turn.phase == P_IDLE && !maestro_inbox_enabled() && t - s_conn.last_use_us > IDLE_CLOSE_US')
+edit(session, 's_resting ? -1 : 200', '(s_resting && !maestro_inbox_enabled()) ? -1 : 200')
 edit(session, '    s_turn.gen = gen;', '    s_turn.gen = gen;\n    s_maestro_reply_gen = maestro_reply_generation();')
 edit(session, '    m.done = true;', '''    m.done = true;
     if (!s_turn.text && s_turn.gen == s_gen.load())
