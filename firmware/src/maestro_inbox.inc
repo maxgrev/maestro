@@ -1,10 +1,11 @@
-// Network work runs on Maestro's existing worker. UI results cross one mutex;
-// view tickets prevent a late HTTP response from opening a page the user left.
+// A small independent worker keeps reading responsive during agent work/audio.
+// Latest-view wins; acknowledgments retry separately and never hold up a tap.
 #include "maestro_notice.h"
 #define INBOX_ROWS 22
-typedef struct { int kind; uint32_t gen, ticket; uint64_t id; char target[200]; char *body; } inbox_job_t;
+typedef struct { int kind; uint32_t gen, ticket; uint64_t id; int64_t queued_at; char target[200]; char *body; } inbox_job_t;
 typedef struct { char target[200]; unsigned unread; bool attention; } inbox_count_t;
-static QueueHandle_t s_inbox_jobs;
+static QueueHandle_t s_inbox_jobs, s_inbox_views;
+static TaskHandle_t s_inbox_task;
 static inbox_count_t *s_counts;
 static size_t s_counts_len;
 static uint64_t s_alerts[64];
@@ -21,10 +22,13 @@ static int64_t s_inbox_polled;
 enum { INBOX_PAGE = 1, INBOX_DETAIL, INBOX_RESTORE, INBOX_ACK, INBOX_MUSE, INBOX_READ_TURN };
 
 bool maestro_inbox_enabled(void) { return maestro_url()[0] && maestro_token()[0]; }
+#include "maestro_inbox_http.inc"
 
 static bool inbox_queue(inbox_job_t job)
 {
-    if (s_inbox_jobs && xQueueSend(s_inbox_jobs, &job, 0) == pdTRUE) return true;
+    job.queued_at = esp_timer_get_time();
+    BaseType_t sent = job.kind < INBOX_ACK ? xQueueOverwrite(s_inbox_views, &job) : xQueueSend(s_inbox_jobs, &job, 0);
+    if (sent == pdTRUE) { if (s_inbox_task) xTaskNotifyGive(s_inbox_task); return true; }
     free(job.body); return false;
 }
 static bool inbox_post(int kind, cJSON *body)
@@ -52,7 +56,7 @@ static void inbox_sync(void)
 {
     if (esp_timer_get_time() - s_inbox_polled < 3000000 || !muse_wifi_connected()) return;
     s_inbox_polled = esp_timer_get_time();
-    cJSON *json = json_http("/api/inbox/status", NULL, NULL, 0);
+    cJSON *json = inbox_http("/api/inbox/status", NULL);
     if (!json) return;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_counts_len = s_alert_len = s_unread = 0;
@@ -79,22 +83,18 @@ static void escape_target(char *out, size_t cap, const char *target)
         n += snprintf(out + n, cap - n, "%%%02X", *p);
     out[n] = 0;
 }
-static void inbox_work(void)
+static bool inbox_request(inbox_job_t *job)
 {
-    static inbox_job_t pending;
-    static int64_t retry_at;
-    if (!pending.kind && xQueueReceive(s_inbox_jobs, &pending, 0) != pdTRUE) return;
-    if (!muse_wifi_connected() || esp_timer_get_time() < retry_at) return;
+    inbox_job_t pending = *job;
     bool post = pending.kind >= INBOX_ACK;
-    if (!post && pending.ticket != atomic_load(&s_inbox_ticket)) { pending.kind = 0; return; }
     char path[850], escaped[601];
     if (pending.kind == INBOX_DETAIL) snprintf(path, sizeof(path), "/api/inbox/%llu?maxBytes=64000", pending.id);
     else if (!post) {
         escape_target(escaped, sizeof(escaped), pending.target);
         snprintf(path, sizeof(path), "/api/inbox?before=%llu&target=%s", pending.id ? pending.id : 9007199254740991ULL, escaped);
     } else strlcpy(path, pending.kind == INBOX_ACK ? "/api/inbox/ack" : pending.kind == INBOX_MUSE ? "/api/inbox/muse" : "/api/inbox/read-turn", sizeof(path));
-    cJSON *json = json_http(path, post ? "application/json" : NULL, pending.body, pending.body ? strlen(pending.body) : 0);
-    if (!json) { retry_at = esp_timer_get_time() + 3000000; return; }
+    cJSON *json = inbox_http(path, pending.body);
+    if (!json) return false;
     if (pending.kind == INBOX_RESTORE) {
         cJSON *item = cJSON_GetArrayItem(cJSON_GetObjectItem(json, "items"), 0);
         cJSON *number = cJSON_GetObjectItem(item, "id");
@@ -102,8 +102,8 @@ static void inbox_work(void)
         cJSON_Delete(json); json = NULL;
         if (id) {
             snprintf(path, sizeof(path), "/api/inbox/%llu?maxBytes=64000", id);
-            json = json_http(path, NULL, NULL, 0);
-            if (!json) { retry_at = esp_timer_get_time() + 3000000; return; }
+            json = inbox_http(path, NULL);
+            if (!json) return false;
         }
     }
     if (!post) {
@@ -115,6 +115,34 @@ static void inbox_work(void)
         }
         xSemaphoreGive(s_lock);
     }
-    cJSON_Delete(json); free(pending.body); pending = (inbox_job_t){0}; retry_at = 0;
-    s_inbox_polled = 0;
+    cJSON_Delete(json); free(job->body); *job = (inbox_job_t){0};
+    return true;
+}
+
+static void inbox_worker(void *arg)
+{
+    (void)arg;
+    inbox_job_t view = {0}, post = {0};
+    int64_t view_retry = 0, post_retry = 0;
+    for (;;) {
+        inbox_job_t latest;
+        if (xQueueReceive(s_inbox_views, &latest, 0) == pdTRUE) { view = latest; view_retry = 0; }
+        if (view.kind && view.ticket != atomic_load(&s_inbox_ticket)) view.kind = 0;
+        int64_t now = esp_timer_get_time();
+        if (muse_wifi_connected() && maestro_inbox_enabled()) {
+            if (view.kind && now >= view_retry) {
+                if (!inbox_request(&view)) view_retry = esp_timer_get_time() + 3000000;
+                continue;
+            }
+            if (!post.kind) xQueueReceive(s_inbox_jobs, &post, 0);
+            if (post.kind && now >= post_retry) {
+                if (!inbox_request(&post)) post_retry = esp_timer_get_time() + 3000000;
+                continue;
+            }
+            inbox_sync();
+        }
+        // A tap wakes us immediately instead of waiting for the voice worker's
+        // one-second poll, an agent timeout, or an entire spoken answer.
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
+    }
 }

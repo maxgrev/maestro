@@ -296,7 +296,6 @@ static void run_job(job_t *job)
             }
             cJSON_Delete(response);
         }
-        inbox_work(); inbox_sync();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     emit(job->gen, MUSE_HATCH_EV_ERROR, "Still working. Check Maestro on Mac.");
@@ -315,8 +314,6 @@ static void worker(void *arg)
             refresh_targets();
             refreshed = esp_timer_get_time();
         }
-        float seconds;
-        if (muse_state_mode(&seconds) != MUSE_MODE_LISTENING) { inbox_work(); inbox_sync(); }
     }
 }
 void maestro_init(void)
@@ -333,6 +330,7 @@ void maestro_init(void)
     s_audio = psram_queue(24, sizeof(audio_t));
     s_nav = psram_queue(8, sizeof(unsigned));
     s_inbox_jobs = psram_queue(16, sizeof(inbox_job_t));
+    s_inbox_views = psram_queue(1, sizeof(inbox_job_t));
     s_caption = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
     configASSERT(s_lock && s_jobs && s_events && s_audio && s_caption);
     s_reply = (maestro_reply_t){.text = s_caption, .capacity = CAPTION_BYTES};
@@ -365,6 +363,8 @@ void maestro_init(void)
     }
     atomic_store(&s_refresh, true);
     BaseType_t ok = xTaskCreateWithCaps(worker, "maestro", 12288, NULL, 4, NULL, MUSE_BIG_CAPS);
+    configASSERT(ok == pdPASS);
+    ok = xTaskCreateWithCaps(inbox_worker, "inbox", 10240, NULL, 3, &s_inbox_task, MUSE_BIG_CAPS);
     configASSERT(ok == pdPASS);
 }
 bool maestro_ready(void)
@@ -827,6 +827,8 @@ bool maestro_console(const char *line, bool whole)
         cJSON_AddNumberToObject(json, "unread", s_unread);
         cJSON_AddNumberToObject(json, "alertGroups", s_alert_groups);
         cJSON_AddBoolToObject(json, "inbox", s_inbox_view);
+        cJSON_AddNumberToObject(json, "inboxRows", s_inbox_view ? s_inbox_count : 0);
+        cJSON_AddNumberToObject(json, "inboxViewMs", s_inbox_view_ms);
         cJSON_AddNumberToObject(json, "replyBytes", s_reply.length);
         xSemaphoreGive(s_lock);
         char *text = cJSON_PrintUnformatted(json);

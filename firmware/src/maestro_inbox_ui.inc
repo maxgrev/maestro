@@ -1,6 +1,7 @@
 static bool s_inbox_view;
 static target_t *s_inbox_rows;
 static size_t s_inbox_count;
+static unsigned s_inbox_view_ms;
 static char s_inbox_filter[200], s_inbox_note[64];
 
 static void list_render(void);
@@ -47,6 +48,8 @@ static void inbox_ui_tick(void)
     inbox_job_t job = s_inbox_result_job;
     xSemaphoreGive(s_lock);
     if (json && job.ticket == atomic_load(&s_inbox_ticket)) {
+        s_inbox_view_ms = (esp_timer_get_time() - job.queued_at) / 1000;
+        ESP_LOGI(TAG, "inbox view %d ready in %u ms", job.kind, s_inbox_view_ms);
         if (job.kind == INBOX_PAGE && s_inbox_view && atomic_load(&s_picker_open)) {
             s_inbox_count = 0;
             cJSON *item;
