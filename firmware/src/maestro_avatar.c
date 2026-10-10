@@ -74,39 +74,67 @@ static unsigned mix(unsigned a, unsigned b, float weight)
 }
 static void grok(const muse_pose_t *p)
 {
-    // Keep the reference's circular silhouette. Flat charcoal avoids RGB565
-    // gradient bands; a thin, antialiased edge separates it from the black screen.
+    // A circular silhouette with expressive eyes, inspired by the Grok mascot.
+    // Flat charcoal avoids RGB565 bands; only the edge is antialiased.
     const unsigned body = 0x181818, rim = 0x383838;
-    float cy = 188 + sinf(p->t * 1.6f), radius = 88;
+    float enter = 1 - expf(-p->mode_t * 5);
+    float happy = p->mode == MUSE_MODE_IDLE ? coverage(p->happy) : 0;
+    float level = coverage(p->level);
+    float cx = 160, cy = 188 + sinf(p->t * 1.6f), radius = 88;
+    float angle = -.42f, look_x = 0, look_y = 0, height = 12;
+    float blink = fmodf(p->t, 5.2f);
+    float open = blink < .24f ? fabsf(blink - .12f) / .12f : 1;
+    if (p->mode == MUSE_MODE_LISTENING) {
+        angle += enter * .3f;
+        look_x = -12 * enter; look_y = -5 * enter;
+        height += 5 * enter + level * 2;
+    } else if (p->mode == MUSE_MODE_THINKING) {
+        look_x = sinf(p->mode_t * 2.4f) * 14 * enter;
+        look_y = -9 * enter;
+        angle += sinf(p->mode_t * 2.4f) * .12f * enter;
+        height -= 5 * enter;
+    } else if (p->mode == MUSE_MODE_SPEAKING) {
+        angle += sinf(p->mode_t * 3) * .12f * enter;
+        height += level * 9;
+        cy -= level * 4;
+    } else if (p->mode == MUSE_MODE_ERROR) {
+        cx += sinf(p->mode_t * 16) * 5 * expf(-p->mode_t * 2);
+        angle += .65f * enter;
+        look_y = 8 * enter; height -= 7 * enter;
+    } else if (p->mode == MUSE_MODE_OFF) {
+        open = 0; look_y = 8; angle = 0;
+    }
+    cy -= happy * 7;
+    angle += happy * sinf(p->t * 9) * .16f;
     const uint16_t body_pixel = color(body);
-    float level = p->mode == MUSE_MODE_SPEAKING ? coverage(p->level) : 0;
-    float blink_t = fmodf(p->t, 5.2f);
-    float open = blink_t < .24f ? fabsf(blink_t - .12f) / .12f : 1;
-    if (p->mode == MUSE_MODE_OFF) open = 0;
-    float look = p->mode == MUSE_MODE_THINKING ? sinf(p->t * 1.5f) * 5 : 0;
-    for (int y = 97; y < 280; y++) for (int x = 70; x < 251; x++) {
-        float dx = x - 160, dy = y - cy, squared = dx*dx + dy*dy;
+    for (int y = 87; y < 283; y++) for (int x = 63; x < 258; x++) {
+        float dx = x - cx, dy = y - cy, squared = dx*dx + dy*dy;
         if (squared < (radius-1.5f)*(radius-1.5f)) {
             pixels[y*SIDE+x] = body_pixel;
             continue;
         }
-        float d = sqrtf(squared);
-        float alpha = coverage(radius - d + .5f);
-        if (alpha > 0) {
-            unsigned shade = mix(body, rim, coverage(d - radius + 1.5f));
-            pixels[y*SIDE+x] = color(mix(0, shade, alpha));
-        }
+        float d = sqrtf(squared), alpha = coverage(radius - d + .5f);
+        if (alpha > 0) pixels[y*SIDE+x] = color(mix(0, mix(body, rim, coverage(d-radius+1.5f)), alpha));
     }
+    float cs = cosf(angle), sn = sinf(angle);
     for (int eye = 0; eye < 2; eye++) {
-        float ex = 168 + eye*37 + look, ey = cy - 32 - eye*12;
-        float h = 12 + level*2 + (p->mode == MUSE_MODE_LISTENING ? 2 : 0);
-        for (int y = (int)ey-25; y <= (int)ey+25; y++) for (int x = (int)ex-20; x <= (int)ex+20; x++) {
-            float dx = x-ex, dy = y-ey, u = dx*.9135f-dy*.4067f, v = dx*.4067f+dy*.9135f;
-            // Squeeze along the eye's long axis for a soft blink.
-            v /= .12f + .88f*open;
-            float end = fmaxf(fabsf(v)-h, 0);
-            float alpha = coverage(7.5f - sqrtf(u*u + end*end));
-            if (alpha > 0) pixels[y*SIDE+x] = color(mix(body, 0xf2f2ef, alpha));
+        float local_x = eye ? 38 : -1, local_y = -34;
+        float ex = cx + local_x*cs - local_y*sn + look_x;
+        float ey = cy + local_x*sn + local_y*cs + look_y;
+        for (int y = (int)ey-34; y <= (int)ey+34; y++) for (int x = (int)ex-34; x <= (int)ex+34; x++) {
+            float dx = x-ex, dy = y-ey, u = dx*cs+dy*sn, v = -dx*sn+dy*cs;
+            // Pet/completion reaction: two smiling arches; work states always win.
+            float curve = -7 + u*u*.055f;
+            float eye_alpha;
+            if (happy > .2f) {
+                eye_alpha = coverage(3.5f - fabsf(v-curve)) * coverage(15 - fabsf(u));
+            } else {
+                v /= .12f + .88f*open;
+                float end = fmaxf(fabsf(v)-height, 0);
+                eye_alpha = coverage(7.5f - sqrtf(u*u + end*end));
+            }
+            if (eye_alpha > 0 && x >= 0 && x < SIDE && y >= 0 && y < SIDE)
+                pixels[y*SIDE+x] = color(mix(body, 0xf2f2ef, eye_alpha));
         }
     }
 }

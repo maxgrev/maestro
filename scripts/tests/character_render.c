@@ -67,7 +67,7 @@ int main(void)
         for (int mode = MUSE_MODE_IDLE; mode < modes; mode++) {
             for (int f = 0; f < (character ? 100 : 1); f++) {
                 muse_pose_t pose = { .mode = mode, .t = f / 6.0f,
-                    .mode_t = f / 6.0f, .level = (f % 11) / 10.0f, .happy = 0 };
+                    .mode_t = f / 6.0f, .level = (f % 11) / 10.0f, .happy = (f % 13) / 12.0f };
                 muse_pixel_render(&pose);
                 invalidate_muse();
                 muse_pixel_scale(fresh, SIZE, 0, SIZE - 1, 0, SIZE - 1);

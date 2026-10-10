@@ -221,3 +221,15 @@ test('a missing Grok callback expires without a resend and a late reply still co
   assert.equal(late.state, 'done'); assert.equal(late.error, '');
   await f.app.close(); f.store.close();
 });
+
+test('Grok submission succeeds even when coding-agent discovery cannot return', async () => {
+  const f = fixture();
+  f.service.herdr.targets = () => { throw new Error('Coding sessions offline'); };
+  try {
+    const id = randomUUID();
+    const response = await f.app.inject({ method: 'POST', url: '/api/turns', headers: auth, payload: { id, target: 'grok', text: 'Hello' } });
+    assert.equal(response.statusCode, 202);
+    await f.service.drain();
+    assert.equal(f.store.get(id)?.state, 'working');
+  } finally { await f.app.close(); f.store.close(); }
+});

@@ -27,9 +27,9 @@ This package targets **Apple Silicon macOS**. It includes its runtimes and speec
 
 A short vibration confirms a choice. Swipe and hold-blue open the same settings page. Blue moves between controls; yellow selects, toggles, or steps a slider. Hold blue to return. Volume and mute are under Sound. The character identifies the agent; a small title distinguishes coding sessions.
 
-The picker shows each agent's character and follows the round screen. Rows widen in the middle; blue brings the focused row clear of the curved edge. Tap **Read reply** or the captions to open the full reply, even after playback ends. Scroll by touch, or press yellow to page up and blue to page down. Hold blue or tap **Back** at the top center to return. Muted replies open the reader automatically. The device keeps the latest reply until you start a new message or change agents; it does not store a chat history. Replies over 64,000 bytes show a notice to continue on the Mac.
+The picker shows each agent's character and follows the round screen. Rows widen in the middle; blue brings the focused row clear of the curved edge. Tap the reply text to open the full reply, even after playback ends. Scroll by touch, or press yellow to page up and blue to page down. Hold blue or tap **Back** at the top center to return. Muted replies open the reader automatically. The device keeps the latest reply until you start a new message or change agents; it does not store a chat history. Replies over 64,000 bytes show a notice to continue on the Mac.
 
-Muse keeps its native animation. Codex uses its original blue companion. Claude uses the community's MIT-licensed Clawd Tank animations. Grok uses a moving black blob based on the supplied reference; Pi uses its official three-color mark. They respond to the device's state and share the SDK's display layer and captions. See [character sources and licenses](firmware/src/avatars/SOURCES.md).
+Muse keeps its native animation. Codex uses its original blue companion. Claude uses the community's MIT-licensed Clawd Tank animations. Grok keeps its round silhouette and uses distinct eyes and motion for listening, thinking, speaking, errors, sleep, and happy reactions; Pi uses its official three-color mark. They respond to the device's state and share the SDK's display layer and captions. See [character sources and licenses](firmware/src/avatars/SOURCES.md).
 
 The device remembers the selected agent. A missing or busy saved session stays unavailable; it does not silently redirect a message to Muse. The list refreshes after Wi-Fi connects and every 15 seconds while idle. The Mac page chooses the recipient of its own messages; the device has its own selector.
 
@@ -56,7 +56,7 @@ A downloaded app uses `~/Library/Application Support/Maestro`. A development app
 
 The local page uses loopback HTTP port 4210. The device uses authenticated HTTPS port 4211 with a pinned certificate. Setup saves the URL, certificate, bearer token, and personal Muse SDK token to device NVS over USB. The generic firmware contains no personal credentials. Bonjour resolves the Mac's `.local` name when its certificate covers that name; numeric addresses remain supported.
 
-The certificate expires after one year. Renew it and use **Save to StopWatch** to provision the new pin. Do not disable certificate checks. The device uses SNTP for TLS time. No public tunnel, cloud relay, MQTT broker, or new orchestration framework is required.
+The certificate expires after one year. Renew it and use **Save to StopWatch** to provision the new pin. Do not disable certificate checks. The device uses SNTP for TLS time. The current build uses the local network. See [voice measurements and portable-access options](docs/voice-and-portability.md) for the next step toward use away from home.
 
 Device NVS and flash encryption remain off for recoverable development. Physical flash access can expose saved Wi-Fi and account credentials. Keep runtime data and recovery images private. Git ignores `.local`, tool caches, build output, and packaged apps.
 

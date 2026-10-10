@@ -56,14 +56,18 @@ edit(ui, 'static lv_obj_t *s_speaker;', 'static lv_obj_t *s_speaker;\nstatic lv_
 edit(ui, '    lv_obj_align(s_state_lbl, LV_ALIGN_TOP_MID, 0, s_small ? 22 : 40 + s_dy);',
      '    lv_obj_align(s_state_lbl, LV_ALIGN_CENTER, 0, -138);')
 edit(ui, 's_small ? 32 : 60 + s_dy', 's_small ? 32 : 111 + s_dy')
-edit(ui, '    s_reply_lbl = make_label(face, font, COLOR_CAPTION);', '''    s_answers[ANSWER_HEARD].top -= 20; /* Room for the full-reply control. */
-    s_reply_lbl = make_label(face, font, COLOR_CAPTION);
+edit(ui, '    s_reply_lbl = make_label(face, font, COLOR_CAPTION);', '''    s_reply_lbl = make_label(face, font, COLOR_CAPTION);
     lv_obj_add_flag(s_reply_lbl, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(s_reply_lbl, 12);
+    lv_obj_set_style_text_opa(s_reply_lbl, LV_OPA_60, LV_STATE_PRESSED);
     lv_obj_add_event_cb(s_reply_lbl, maestro_reply_clicked, LV_EVENT_CLICKED, NULL);''')
 edit(ui, '    s_caption_lbl = make_label(face, font_pick(caption_font(), &lv_font_unscii_8), COLOR_CAPTION);', '''    s_caption_lbl = make_label(face, font_pick(caption_font(), &lv_font_unscii_8), COLOR_CAPTION);
     lv_obj_add_flag(s_caption_lbl, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(s_caption_lbl, 12);
+    lv_obj_set_style_text_opa(s_caption_lbl, LV_OPA_60, LV_STATE_PRESSED);
     lv_obj_add_event_cb(s_caption_lbl, maestro_reply_clicked, LV_EVENT_CLICKED, NULL);''')
-edit(ui, 'cap_top + cap_h / 2);', 'cap_top + cap_h / 2 - 20);')
+edit(ui, 'lv_obj_set_flag(lbl, LV_OBJ_FLAG_HIDDEN, !caption[0]);',
+     'lv_obj_set_flag(lbl, LV_OBJ_FLAG_HIDDEN, !caption[0] || (mode == MUSE_MODE_LISTENING && (!strncmp(caption, "LISTENING", 9) || !strncmp(caption, "RECORDING", 9))));')
 # Reading uses Maestro's scrollable full reply; keep home geometry stable on mute.
 edit(ui, 'int layout = muse_settings_speaker_on() ? ANSWER_HEARD : ANSWER_READ;', 'int layout = ANSWER_HEARD;')
 edit(ui, '    set_mic_color(COLOR_DIM);', '    set_mic_color(0xe8cb65);')

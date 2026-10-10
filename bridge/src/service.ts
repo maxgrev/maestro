@@ -10,11 +10,15 @@ export class Service {
   private tasks = new Set<Promise<void>>();
   private accepting = true;
   constructor(readonly config: Config, readonly store: Store, readonly herdr: Herdr, readonly speech: SpeechEngine, private fetcher = fetch) {}
+  private grokTarget(): Target | undefined {
+    return this.config.grok ? { id: 'grok', name: this.config.grok.name, provider: 'grok', detail: '', status: 'ready', available: true, character: 'grok' } : undefined;
+  }
   async targets(): Promise<{ targets: Target[]; warnings: string[] }> {
     this.store.expireGrok();
     const targets: Target[] = [], warnings: string[] = [];
     try { targets.push(...await this.herdr.targets()); } catch { warnings.push('Herdr is offline. Start the configured Herdr session.'); }
-    if (this.config.grok) targets.unshift({ id: 'grok', name: this.config.grok.name, provider: 'grok', detail: 'Saved routine', status: 'ready', available: true, character: 'grok' });
+    const grok = this.grokTarget();
+    if (grok) targets.unshift(grok);
     else warnings.push('Grok Bot needs a webhook and reply helper.');
     return { targets, warnings };
   }
@@ -29,11 +33,12 @@ export class Service {
     } else if (body.length % 2 || body.length < 9600 || body.length > 640000) {
       throw new UserError('Record between 0.3 and 20 seconds of 16 kHz mono PCM16 audio.');
     }
-    const { targets } = await this.targets();
+    // A Grok request does not depend on local coding-session discovery.
+    const targets = targetId === 'grok' ? [this.grokTarget()] : (await this.targets()).targets;
     // Discovery awaited: another request may have reserved this ID in the meantime.
     const duplicate = this.store.existing(id, fingerprint);
     if (duplicate) return duplicate;
-    const target = targets.find(t => t.id === targetId);
+    const target = targets.find(t => t?.id === targetId);
     if (!target) throw new UserError('This agent is unavailable. Refresh the list.', 409);
     if (!target.available) throw new UserError('The agent is busy or needs your attention.', 409);
     const turn = this.store.create(id, fingerprint, target, typeof body === 'string' ? body.trim() : '');
@@ -43,6 +48,7 @@ export class Service {
   }
   private async run(id: string, audio?: Buffer) {
     try {
+      this.speech.warm?.();
       if (audio) {
         this.store.update(id, { state: 'transcribing' });
         const text = await this.speech.transcribe(audio);

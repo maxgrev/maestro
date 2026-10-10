@@ -274,7 +274,7 @@ static void run_job(job_t *job)
                 bool spoken = reply && speak_reply(job->gen, reply);
                 free(reply);
                 if (!spoken && job->gen == atomic_load(&s_gen)) {
-                    emit(job->gen, MUSE_HATCH_EV_ERROR, "Speech stopped. Tap Read reply.");
+                    emit(job->gen, MUSE_HATCH_EV_ERROR, "Speech stopped. Tap the reply.");
                     return;
                 }
                 emit(job->gen, MUSE_HATCH_EV_DONE, "");
@@ -615,7 +615,7 @@ static void list_render(void)
         lv_obj_set_size(label, lv_pct(100), lv_font_get_line_height(&lv_font_montserrat_20));
         lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(label, s_targets[i].name);
-        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_align(label, target->available && !target->detail[0] ? LV_ALIGN_LEFT_MID : LV_ALIGN_TOP_LEFT, 0, 0);
         lv_obj_t *detail = lv_label_create(text);
         lv_obj_set_style_text_font(detail, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(detail, lv_color_hex(target->available ? 0xb7c9c1 : 0xd7b98b), 0);
@@ -751,6 +751,7 @@ bool maestro_console(const char *line, bool whole)
         maestro_reply_update(&s_reply, 0, line + 16, true);
         s_caption_gen = atomic_fetch_add(&s_gen, 1) + 1;
         xSemaphoreGive(s_lock);
+        muse_state_set_caption("%s", line + 16);
     }
 #endif
     else if (!strncmp(line, "maestro.setup=", 14)) {
@@ -850,6 +851,6 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_list_note, &lv_font_montserrat_14, 0);
     lv_obj_align(s_list_note, LV_ALIGN_TOP_MID, 0, 118);
     lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
-    reader_build(parent);
+    reader_build();
     lv_timer_create(ui_tick, 70, NULL);
 }

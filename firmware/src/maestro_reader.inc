@@ -1,5 +1,5 @@
 // UI task only. The label owns a snapshot, never the worker's mutable reply.
-static lv_obj_t *s_reader, *s_reader_scroll, *s_reader_text, *s_read_button, *s_reader_note;
+static lv_obj_t *s_reader, *s_reader_scroll, *s_reader_text, *s_reader_note;
 static lv_obj_t *s_reader_page_buttons[2];
 static char *s_reader_copy;
 static uint32_t s_reader_version, s_auto_read_gen = UINT32_MAX;
@@ -70,8 +70,16 @@ static void reader_tick(void)
         lv_label_set_text(s_reader_note, truncated ? "Continues in Maestro on Mac" : "");
     }
     float seconds;
-    bool has_reply = s_reader_copy[0] && muse_state_mode(&seconds) != MUSE_MODE_LISTENING;
-    lv_obj_set_flag(s_read_button, LV_OBJ_FLAG_HIDDEN, !has_reply);
+    muse_mode_t mode = muse_state_mode(&seconds);
+    bool has_reply = s_reader_copy[0] && mode != MUSE_MODE_LISTENING;
+    // Keep the reply itself available to tap after playback clears its caption.
+    // Never replace a connection error or a transcript from the next recording.
+    if (has_reply && mode == MUSE_MODE_IDLE) {
+        char caption[MUSE_CAPTION_MAX];
+        uint32_t version = 0;
+        muse_state_caption(caption, sizeof(caption), &version);
+        if (!caption[0]) muse_state_set_caption("%s", s_reader_copy);
+    }
     if (!has_reply && atomic_load(&s_reader_open)) close_reader(NULL);
     if (has_reply && !muse_settings_speaker_on() && generation == atomic_load(&s_gen)
         && s_auto_read_gen != generation && !atomic_load(&s_picker_open)
@@ -82,22 +90,11 @@ static void reader_tick(void)
     lv_obj_set_state(s_reader_page_buttons[0], LV_STATE_DISABLED, y <= 0);
     lv_obj_set_state(s_reader_page_buttons[1], LV_STATE_DISABLED, remaining <= 0);
 }
-static void reader_build(lv_obj_t *face)
+static void reader_build(void)
 {
     s_reader_copy = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
     configASSERT(s_reader_copy);
-    s_read_button = lv_button_create(face);
-    lv_obj_remove_style_all(s_read_button);
-    lv_obj_set_size(s_read_button, 154, 38);
-    lv_obj_align(s_read_button, LV_ALIGN_TOP_MID, 0, 407);
-    lv_obj_set_style_text_color(s_read_button, lv_color_hex(0xa77dff), 0);
-    lv_obj_set_style_text_opa(s_read_button, LV_OPA_60, LV_STATE_PRESSED);
-    lv_obj_t *label = lv_label_create(s_read_button);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-    lv_label_set_text(label, LV_SYMBOL_FILE "  Read reply"); lv_obj_center(label);
-    lv_obj_add_event_cb(s_read_button, open_reader, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_flag(s_read_button, LV_OBJ_FLAG_HIDDEN);
-
+    lv_obj_t *label;
     s_reader = lv_obj_create(lv_screen_active());
     lv_obj_remove_style_all(s_reader);
     lv_obj_set_size(s_reader, lv_pct(100), lv_pct(100));
