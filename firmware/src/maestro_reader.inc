@@ -34,7 +34,8 @@ static void reader_page(int direction)
     // Keep one line of context between pages. Native touch scrolling remains free.
     int pitch = lv_font_get_line_height(&lv_font_montserrat_20) + 5;
     int32_t y = lv_obj_get_scroll_y(s_reader_scroll);
-    int32_t target = (y / pitch + direction * 8) * pitch;
+    int lines = (lv_obj_get_height(s_reader_scroll) - 8 + 5) / pitch;
+    int32_t target = (y / pitch + direction * (lines - 1)) * pitch;
     lv_obj_scroll_by_bounded(s_reader_scroll, 0, y - target, LV_ANIM_OFF);
     muse_state_poke();
 }
@@ -118,23 +119,16 @@ static void reader_build(lv_obj_t *face)
         lv_label_set_text(label, i ? LV_SYMBOL_DOWN : LV_SYMBOL_UP); lv_obj_center(label);
         lv_obj_add_event_cb(button, reader_page_clicked, LV_EVENT_CLICKED, (void *)(intptr_t)(i ? 1 : -1));
     }
-    lv_obj_t *back = lv_button_create(s_reader);
-    lv_obj_remove_style_all(back);
-    lv_obj_set_size(back, 56, 48); lv_obj_align(back, LV_ALIGN_TOP_MID, -96, 36);
-    lv_obj_set_style_text_font(back, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_opa(back, LV_OPA_60, LV_STATE_PRESSED);
-    label = lv_label_create(back); lv_label_set_text(label, LV_SYMBOL_LEFT); lv_obj_center(label);
-    lv_obj_set_style_text_color(label, lv_color_hex(0xa77dff), 0);
-    lv_obj_add_event_cb(back, close_reader, LV_EVENT_CLICKED, NULL);
+    maestro_back_button(s_reader, close_reader);
     label = lv_label_create(s_reader);
     lv_obj_set_style_text_font(label, &lv_font_unscii_16, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(0xa77dff), 0);
     lv_label_set_text(label, "REPLY"); lv_obj_align(label, LV_ALIGN_CENTER, 0, -138);
     s_reader_scroll = lv_obj_create(s_reader);
     lv_obj_remove_style_all(s_reader_scroll);
-    // Nine whole lines plus the same bottom padding at the end of the reply.
-    lv_obj_set_size(s_reader_scroll, 314, 9 * lv_font_get_line_height(&lv_font_montserrat_20) + 8 * 5 + 8);
-    lv_obj_align(s_reader_scroll, LV_ALIGN_TOP_MID, 0, 132);
+    // Ten whole lines, with straight margins that keep text clear of the curve.
+    lv_obj_set_size(s_reader_scroll, 326, 10 * lv_font_get_line_height(&lv_font_montserrat_20) + 9 * 5 + 8);
+    lv_obj_align(s_reader_scroll, LV_ALIGN_TOP_MID, 0, 124);
     lv_obj_set_style_pad_right(s_reader_scroll, 14, 0);
     lv_obj_set_style_pad_bottom(s_reader_scroll, 8, 0);
     lv_obj_set_style_bg_opa(s_reader_scroll, LV_OPA_COVER, 0);
@@ -147,7 +141,7 @@ static void reader_build(lv_obj_t *face)
     lv_obj_set_style_width(s_reader_scroll, 4, LV_PART_SCROLLBAR);
     lv_obj_add_event_cb(s_reader_scroll, reader_touched, LV_EVENT_SCROLL, NULL);
     s_reader_text = lv_label_create(s_reader_scroll);
-    lv_obj_set_width(s_reader_text, 300);
+    lv_obj_set_width(s_reader_text, 312);
     lv_obj_set_style_text_font(s_reader_text, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_line_space(s_reader_text, 5, 0);
     lv_obj_set_style_text_color(s_reader_text, lv_color_hex(0xeeeaf5), 0);
@@ -155,7 +149,7 @@ static void reader_build(lv_obj_t *face)
     lv_label_set_text_static(s_reader_text, s_reader_copy);
     s_reader_note = lv_label_create(s_reader);
     lv_obj_set_style_text_font(s_reader_note, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_reader_note, LV_ALIGN_TOP_MID, 0, 397);
+    lv_obj_align(s_reader_note, LV_ALIGN_TOP_MID, 0, 410);
     lv_label_set_text(s_reader_note, "");
     lv_obj_add_flag(s_reader, LV_OBJ_FLAG_HIDDEN);
 }

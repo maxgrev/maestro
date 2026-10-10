@@ -19,6 +19,7 @@ bool maestro_ui_settings_is_open(void);
 void maestro_settings_key(unsigned key);
 void maestro_settings_focus_reset(void);
 void maestro_menu_icons(lv_obj_t *parent);
+lv_obj_t *maestro_back_button(lv_obj_t *parent, lv_event_cb_t callback);
 int maestro_character(void);
 const char *maestro_idle_label(void);
 bool maestro_confirm(void);

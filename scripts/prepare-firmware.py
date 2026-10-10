@@ -93,7 +93,9 @@ edit(settings, '#include "muse_settings_ui.h"', '#include "muse_settings_ui.h"\n
 edit(settings, '#define LIST_W 330', '#define LIST_W 310')
 edit(settings, '#define LIST_TOP 84', '#define LIST_TOP 120')
 edit(settings, '    lv_obj_align(b, LV_ALIGN_TOP_MID, -112, 28);',
-     '    lv_obj_align(b, LV_ALIGN_TOP_MID, -96, 36);\n    lv_obj_add_flag(b, LV_OBJ_FLAG_USER_1); /* Hold blue already goes back. */')
+     '    lv_obj_align(b, LV_ALIGN_TOP_MID, -112, 28);\n    lv_obj_add_flag(b, LV_OBJ_FLAG_USER_1); /* Hold blue already goes back. */')
+edit(settings, '        lv_obj_t *b = back_button(p);', '        lv_obj_t *b = maestro_back_button(p, on_back);')
+edit(settings, 'compact ? (back ? 12 : 8) : 44', 'compact ? (back ? 12 : 8) : 87')
 edit(settings, '    catch_swipes(p);', '    catch_swipes(p);\n    maestro_menu_icons(p);')
 edit(settings, 'muse_board->height - list_top);', 'muse_board->height - list_top - (muse_board->round ? 70 : 0));')
 edit(settings, '    s_sound = page(tile, "SOUND", true, &list);',

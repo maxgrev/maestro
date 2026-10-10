@@ -522,21 +522,64 @@ static void select_target(const target_t *target)
 }
 static void choose(lv_event_t *event) { select_target(lv_event_get_user_data(event)); }
 static void row_deleted(lv_event_t *event) { free(lv_event_get_user_data(event)); }
+static void curve_rows(lv_event_t *event)
+{
+    lv_area_t panel;
+    lv_obj_get_coords(s_panel, &panel);
+    int center = (panel.y1 + panel.y2) / 2;
+    int radius = lv_obj_get_width(s_panel) / 2 - 8;
+    for (size_t i = 0; i < s_visible_count; i++) {
+        lv_area_t row;
+        lv_obj_get_coords(s_row_buttons[i], &row);
+        int dy = LV_MAX(abs(row.y1 - center), abs(row.y2 - center));
+        // Fit the whole card inside the circle. Offscreen rows keep a useful
+        // minimum width; the panel's circular clip handles the edge preview.
+        lv_sqrt_res_t chord = {0};
+        if (dy < radius) lv_sqrt(radius * radius - dy * dy, &chord, 0x8000);
+        int width = LV_CLAMP(200, 2 * chord.i, 414);
+        lv_obj_set_width(s_row_buttons[i], width);
+    }
+    if (event) muse_state_poke();
+}
 static void focus_row(void)
 {
     for (size_t i = 0; i < s_visible_count; i++) {
-        lv_obj_set_style_border_width(s_row_buttons[i], i == s_focus ? 2 : 0, 0);
-        lv_obj_set_style_border_color(s_row_buttons[i], lv_color_hex(0xe8cb65), 0);
+        lv_obj_set_style_border_opa(s_row_buttons[i], i == s_focus ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
     }
-    if (s_visible_count) lv_obj_scroll_to_view(s_row_buttons[s_focus], LV_ANIM_OFF);
+    if (!s_visible_count) return;
+    lv_obj_update_layout(s_rows);
+    lv_area_t row, list;
+    lv_obj_get_coords(s_row_buttons[s_focus], &row);
+    lv_obj_get_coords(s_rows, &list);
+    // Bring a button-selected row out of either curved edge before confirming.
+    if (row.y1 < list.y1 + 8 || row.y2 > list.y1 + 272)
+        lv_obj_scroll_by_bounded(s_rows, 0, list.y1 + 136 - (row.y1 + row.y2) / 2, LV_ANIM_OFF);
+    curve_rows(NULL);
 }
 static void list_render(void)
 {
+    const char *note = !muse_wifi_connected() ? "Connect Wi-Fi in Settings" :
+        atomic_load(&s_bridge_online) ? "" : "Mac offline. Open Maestro.";
+    lv_label_set_text(s_list_note, note);
+    int top = note[0] ? 142 : 120;
+    lv_obj_set_y(s_rows, top);
+    lv_obj_set_height(s_rows, lv_obj_get_height(s_panel) - top);
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool unchanged = s_visible_count == s_count;
+    for (size_t i = 0; unchanged && i < s_count; i++)
+        unchanged = !memcmp(&s_visible[i], &s_targets[i], sizeof(target_t));
+    if (unchanged) {
+        // Polling the Mac must not reset a finger scroll or delete a pressed row.
+        s_shown_version = atomic_load(&s_list_version);
+        xSemaphoreGive(s_lock);
+        lv_obj_update_layout(s_rows);
+        curve_rows(NULL);
+        return;
+    }
     char focused[200] = "";
     if (s_focus < s_visible_count) strlcpy(focused, s_visible[s_focus].id, sizeof(focused));
-    lv_obj_clean(s_rows);
     s_visible_count = 0;
-    xSemaphoreTake(s_lock, portMAX_DELAY);
+    lv_obj_clean(s_rows);
     if (!focused[0]) strlcpy(focused, s_selected.id, sizeof(focused));
     for (size_t i = 0; i < s_count; i++) {
         // The row owns its target, so a background refresh cannot change a tap's recipient.
@@ -547,41 +590,51 @@ static void list_render(void)
         lv_obj_t *button = lv_button_create(s_rows);
         s_row_buttons[s_visible_count++] = button;
         if (!strcmp(focused, target->id)) s_focus = s_visible_count - 1;
-        lv_obj_set_size(button, lv_pct(100), 68);
+        lv_obj_remove_style_all(button);
+        lv_obj_set_size(button, 414, 68);
+        lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(s_targets[i].id, s_selected.id) ? 0x2e2552 : 0x1a1530), 0);
+        lv_obj_set_style_bg_color(button, lv_color_hex(0x3c315d), LV_STATE_PRESSED);
         lv_obj_set_style_radius(button, 18, 0);
         lv_obj_set_style_pad_hor(button, 10, 0);
+        lv_obj_set_style_pad_ver(button, 4, 0);
+        lv_obj_set_style_border_width(button, 2, 0);
+        lv_obj_set_style_border_color(button, lv_color_hex(0xe8cb65), 0);
+        lv_obj_set_flex_flow(button, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(button, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(button, 8, 0);
         lv_obj_t *portrait = lv_image_create(button);
         lv_image_set_src(portrait, &s_portraits[target->character]);
-        lv_obj_align(portrait, LV_ALIGN_LEFT_MID, -4, 0);
+        lv_obj_t *text = lv_obj_create(button);
+        lv_obj_remove_style_all(text);
+        lv_obj_remove_flag(text, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_flex_grow(text, 1);
+        lv_obj_set_height(text, 44);
+        lv_obj_t *label = lv_label_create(text);
+        // Dots mode needs a fixed height to keep long session names on one line.
+        lv_obj_set_size(label, lv_pct(100), lv_font_get_line_height(&lv_font_montserrat_20));
+        lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
+        lv_label_set_text(label, s_targets[i].name);
+        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_t *detail = lv_label_create(text);
+        lv_obj_set_style_text_font(detail, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(detail, lv_color_hex(target->available ? 0xb7c9c1 : 0xd7b98b), 0);
+        lv_obj_set_size(detail, lv_pct(100), lv_font_get_line_height(&lv_font_montserrat_14));
+        lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_DOTS);
+        lv_label_set_text(detail, target->available ? target->detail : target->status);
+        lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         if (!strcmp(target->id, s_selected.id)) {
             lv_obj_t *selected = lv_label_create(button);
             lv_obj_set_style_text_font(selected, &lv_font_montserrat_14, 0);
             lv_obj_set_style_text_color(selected, lv_color_hex(0xa77dff), 0);
             lv_label_set_text(selected, LV_SYMBOL_OK);
-            lv_obj_align(selected, LV_ALIGN_RIGHT_MID, 0, 0);
         }
-        lv_obj_t *label = lv_label_create(button);
-        // Dots mode needs a fixed height to keep long session names on one line.
-        lv_obj_set_size(label, 204, lv_font_get_line_height(&lv_font_montserrat_20));
-        lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
-        lv_label_set_text(label, s_targets[i].name);
-        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 60, -2);
-        lv_obj_t *detail = lv_label_create(button);
-        lv_obj_set_style_text_font(detail, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(detail, lv_color_hex(target->available ? 0xb7c9c1 : 0xd7b98b), 0);
-        lv_obj_set_size(detail, 204, lv_font_get_line_height(&lv_font_montserrat_14));
-        lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_DOTS);
-        lv_label_set_text(detail, target->available ? target->detail : target->status);
-        lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 60, 0);
         lv_obj_add_event_cb(button, choose, LV_EVENT_CLICKED, target);
         lv_obj_add_event_cb(button, row_deleted, LV_EVENT_DELETE, target);
     }
     s_shown_version = atomic_load(&s_list_version);
     xSemaphoreGive(s_lock);
     if (s_focus >= s_visible_count) s_focus = 0;
-    lv_label_set_text(s_list_note, !muse_wifi_connected() ? "Connect Wi-Fi in Settings" :
-        atomic_load(&s_bridge_online) ? "" : "Mac offline. Open Maestro.");
     focus_row();
 }
 static void open_list(lv_event_t *event)
@@ -737,6 +790,22 @@ void maestro_menu_icons(lv_obj_t *parent)
         lv_obj_align(icon, LV_ALIGN_CENTER, i ? 128 : -128, -138);
     }
 }
+lv_obj_t *maestro_back_button(lv_obj_t *parent, lv_event_cb_t callback)
+{
+    lv_obj_t *button = lv_button_create(parent);
+    lv_obj_remove_style_all(button);
+    lv_obj_set_size(button, 92, 52);
+    lv_obj_align(button, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_set_style_text_font(button, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(button, lv_color_hex(0xa77dff), 0);
+    lv_obj_set_style_text_opa(button, LV_OPA_60, LV_STATE_PRESSED);
+    lv_obj_add_flag(button, LV_OBJ_FLAG_USER_1); // Physical hold already goes back.
+    lv_obj_t *label = lv_label_create(button);
+    lv_label_set_text(label, LV_SYMBOL_LEFT "  Back");
+    lv_obj_center(label);
+    lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, NULL);
+    return button;
+}
 void maestro_ui_build(lv_obj_t *parent)
 {
     portraits_build();
@@ -755,31 +824,31 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_set_style_bg_color(s_panel, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(s_panel, LV_OPA_COVER, 0);
     lv_obj_set_style_text_font(s_panel, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_radius(s_panel, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_clip_corner(s_panel, true, 0);
     lv_obj_remove_flag(s_panel, LV_OBJ_FLAG_SCROLLABLE);
     maestro_menu_icons(s_panel);
-    lv_obj_t *close = lv_button_create(s_panel);
-    lv_obj_remove_style_all(close);
-    lv_obj_set_size(close, 56, 48); lv_obj_align(close, LV_ALIGN_TOP_MID, -96, 36);
-    lv_obj_t *arrow = lv_label_create(close); lv_label_set_text(arrow, LV_SYMBOL_LEFT); lv_obj_center(arrow);
-    lv_obj_set_style_text_color(arrow, lv_color_hex(0xa77dff), 0);
-    lv_obj_add_event_cb(close, open_list, LV_EVENT_CLICKED, NULL);
+    maestro_back_button(s_panel, open_list);
     lv_obj_t *title = lv_label_create(s_panel);
     lv_obj_set_style_text_font(title, &lv_font_unscii_16, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xa77dff), 0);
     lv_obj_set_style_text_letter_space(title, 2, 0);
-    lv_label_set_text(title, "AGENTS"); lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 44);
+    lv_label_set_text(title, "AGENTS"); lv_obj_align(title, LV_ALIGN_CENTER, 0, -138);
     s_rows = lv_obj_create(s_panel);
-    lv_obj_set_size(s_rows, 340, 234); lv_obj_align(s_rows, LV_ALIGN_TOP_MID, 0, 120);
-    lv_obj_set_style_pad_all(s_rows, 0, 0); lv_obj_set_style_border_width(s_rows, 0, 0);
-    lv_obj_set_style_bg_opa(s_rows, LV_OPA_TRANSP, 0);
+    lv_obj_remove_style_all(s_rows);
+    lv_obj_set_size(s_rows, lv_pct(100), 346); lv_obj_align(s_rows, LV_ALIGN_TOP_MID, 0, 120);
     lv_obj_set_flex_flow(s_rows, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(s_rows, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(s_rows, 10, 0);
-    lv_obj_set_style_pad_all(s_rows, 3, 0);
+    lv_obj_set_style_pad_top(s_rows, 8, 0);
+    lv_obj_set_style_pad_bottom(s_rows, 136, 0);
     lv_obj_set_scroll_dir(s_rows, LV_DIR_VER);
+    lv_obj_remove_flag(s_rows, LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_ELASTIC);
     lv_obj_set_scrollbar_mode(s_rows, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_event_cb(s_rows, curve_rows, LV_EVENT_SCROLL, NULL);
     s_list_note = lv_label_create(s_panel);
     lv_obj_set_style_text_font(s_list_note, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_list_note, LV_ALIGN_TOP_MID, 0, 396);
+    lv_obj_align(s_list_note, LV_ALIGN_TOP_MID, 0, 118);
     lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
     reader_build(parent);
     lv_timer_create(ui_tick, 70, NULL);
