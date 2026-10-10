@@ -19,6 +19,7 @@
 #include "freertos/idf_additions.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include "maestro_font.h"
 #include "cJSON.h"
 #include <stdatomic.h>
 #include <stdio.h>
@@ -249,9 +250,11 @@ static void run_job(job_t *job)
     }
     cJSON_Delete(response);
     emit(job->gen, MUSE_HATCH_EV_SENT, "");
-    snprintf(path, sizeof(path), "/api/turns/%s", job->id);
+    // Wake on completion without a full second of blind sleep after each poll.
+    snprintf(path, sizeof(path), "/api/turns/%s?wait=1000", job->id);
     int64_t deadline = esp_timer_get_time() + 180LL * 1000000;
     while (esp_timer_get_time() < deadline && job->gen == atomic_load(&s_gen)) {
+        int64_t poll_started = esp_timer_get_time();
         response = json_http(path, NULL, NULL, 0);
         if (response) {
             const char *state = field(response, "state");
@@ -296,7 +299,10 @@ static void run_job(job_t *job)
             }
             cJSON_Delete(response);
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        // Older bridges ignore the wait query. Keep their request rate bounded,
+        // and back off after network failures; new bridges already waited.
+        int remaining_ms = 1000 - (esp_timer_get_time() - poll_started) / 1000;
+        if (remaining_ms > 0) vTaskDelay(pdMS_TO_TICKS(remaining_ms));
     }
     emit(job->gen, MUSE_HATCH_EV_ERROR, "Still working. Check Maestro on Mac.");
 }
@@ -550,25 +556,7 @@ static void select_target(const target_t *target)
 }
 static void choose(lv_event_t *event) { select_target(lv_event_get_user_data(event)); }
 static void row_deleted(lv_event_t *event) { free(lv_event_get_user_data(event)); }
-static void curve_rows(lv_event_t *event)
-{
-    lv_area_t panel;
-    lv_obj_get_coords(s_panel, &panel);
-    int center = (panel.y1 + panel.y2) / 2;
-    int radius = lv_obj_get_width(s_panel) / 2 - 8;
-    for (size_t i = 0; i < s_visible_count; i++) {
-        lv_area_t row;
-        lv_obj_get_coords(s_row_buttons[i], &row);
-        int dy = LV_MAX(abs(row.y1 - center), abs(row.y2 - center));
-        // Fit the whole card inside the circle. Offscreen rows keep a useful
-        // minimum width; the panel's circular clip handles the edge preview.
-        lv_sqrt_res_t chord = {0};
-        if (dy < radius) lv_sqrt(radius * radius - dy * dy, &chord, 0x8000);
-        int width = LV_CLAMP(200, 2 * chord.i, 414);
-        lv_obj_set_width(s_row_buttons[i], width);
-    }
-    if (event) muse_state_poke();
-}
+static void rows_scrolled(lv_event_t *event) { (void)event; muse_state_poke(); }
 static void focus_row(void)
 {
     for (size_t i = 0; i < s_visible_count; i++) {
@@ -582,7 +570,6 @@ static void focus_row(void)
     // Bring a button-selected row out of either curved edge before confirming.
     if (row.y1 < list.y1 + 8 || row.y2 > list.y1 + 272)
         lv_obj_scroll_by_bounded(s_rows, 0, list.y1 + 136 - (row.y1 + row.y2) / 2, LV_ANIM_OFF);
-    curve_rows(NULL);
 }
 static void list_render(void)
 {
@@ -608,8 +595,6 @@ static void list_render(void)
         // Polling the Mac must not reset a finger scroll or delete a pressed row.
         s_shown_version = atomic_load(&s_list_version);
         xSemaphoreGive(s_lock);
-        lv_obj_update_layout(s_rows);
-        curve_rows(NULL);
         return;
     }
     char focused[200] = "";
@@ -627,11 +612,11 @@ static void list_render(void)
         s_row_buttons[s_visible_count++] = button;
         if (!strcmp(focused, target->id)) s_focus = s_visible_count - 1;
         lv_obj_remove_style_all(button);
-        lv_obj_set_size(button, 414, 68);
+        lv_obj_set_size(button, 382, 72);
         lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(!strcmp(target->id, s_selected.id) ? 0x2e2552 : 0x1a1530), 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(0x3c315d), LV_STATE_PRESSED);
-        lv_obj_set_style_radius(button, 18, 0);
+        lv_obj_set_style_radius(button, 0, 0);
         lv_obj_set_style_pad_hor(button, 10, 0);
         lv_obj_set_style_pad_ver(button, 4, 0);
         lv_obj_set_style_border_width(button, 2, 0);
@@ -645,7 +630,7 @@ static void list_render(void)
         } else {
             lv_obj_t *icon = lv_label_create(button);
             lv_obj_set_width(icon, 56); lv_obj_set_style_text_align(icon, LV_TEXT_ALIGN_CENTER, 0);
-            lv_obj_set_style_text_font(icon, &lv_font_montserrat_28, 0);
+            lv_obj_set_style_text_font(icon, &maestro_font_24, 0);
             lv_label_set_text(icon, !strcmp(target->id, "inbox") ? LV_SYMBOL_ENVELOPE : LV_SYMBOL_DOWN);
         }
         lv_obj_t *text = lv_obj_create(button);
@@ -655,21 +640,21 @@ static void list_render(void)
         lv_obj_set_height(text, 44);
         lv_obj_t *label = lv_label_create(text);
         // Dots mode needs a fixed height to keep long session names on one line.
-        lv_obj_set_size(label, lv_pct(100), lv_font_get_line_height(&lv_font_montserrat_20));
+        lv_obj_set_size(label, lv_pct(100), lv_font_get_line_height(&maestro_font_20));
         lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(label, target->name);
         lv_obj_align(label, target->available && !target->detail[0] ? LV_ALIGN_LEFT_MID : LV_ALIGN_TOP_LEFT, 0, 0);
         lv_obj_t *detail = lv_label_create(text);
-        lv_obj_set_style_text_font(detail, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(detail, &maestro_font_16, 0);
         lv_obj_set_style_text_color(detail, lv_color_hex(target->available ? 0xb7c9c1 : 0xd7b98b), 0);
-        lv_obj_set_size(detail, lv_pct(100), lv_font_get_line_height(&lv_font_montserrat_14));
+        lv_obj_set_size(detail, lv_pct(100), lv_font_get_line_height(&maestro_font_16));
         lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(detail, target->available ? target->detail : target->status);
         lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         {
             lv_obj_t *selected = lv_label_create(button);
             s_row_badges[s_visible_count - 1] = selected;
-            lv_obj_set_style_text_font(selected, &lv_font_montserrat_14, 0);
+            lv_obj_set_style_text_font(selected, &maestro_font_16, 0);
             lv_obj_set_style_text_color(selected, lv_color_hex(0xa77dff), 0);
             lv_label_set_text(selected, "");
         }
@@ -703,11 +688,16 @@ static void open_list(lv_event_t *event)
     atomic_store(&s_refresh, true);
     muse_state_poke();
 }
+#include "maestro_benchmark.inc"
 static void ui_tick(lv_timer_t *timer)
 {
     (void)timer;
     unsigned key = 0;
     xQueueReceive(s_nav, &key, 0);
+#if CONFIG_LV_USE_SNAPSHOT
+    if (key == 8) scroll_benchmark_start();
+    scroll_benchmark_tick();
+#endif
     inbox_ui_tick();
     reader_tick();
     if (key == 6) open_reader(NULL);
@@ -794,6 +784,7 @@ bool maestro_console(const char *line, bool whole)
     else if (!strcmp(line, "maestro.reply")) maestro_show_reply();
     else if (!strcmp(line, "maestro.inbox")) navigate(7);
 #if CONFIG_LV_USE_SNAPSHOT
+    else if (!strcmp(line, "maestro.benchmark")) navigate(8);
     else if (!strncmp(line, "maestro.preview=", 16)) {
         // USB bench preview, alongside the SDK's face= and screenshot commands.
         // Never sends a message or changes the selected agent.
@@ -842,7 +833,7 @@ void maestro_menu_icons(lv_obj_t *parent)
 {
     for (int i = 0; i < 2; i++) {
         lv_obj_t *icon = lv_label_create(parent);
-        lv_obj_set_style_text_font(icon, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_text_font(icon, &maestro_font_24, 0);
         lv_obj_set_style_text_color(icon, lv_color_hex(i ? 0x658cff : 0xe8cb65), 0);
         lv_label_set_text(icon, i ? LV_SYMBOL_DOWN : LV_SYMBOL_OK);
         lv_obj_align(icon, LV_ALIGN_CENTER, i ? 128 : -128, -138);
@@ -854,7 +845,7 @@ lv_obj_t *maestro_back_button(lv_obj_t *parent, lv_event_cb_t callback)
     lv_obj_remove_style_all(button);
     lv_obj_set_size(button, 92, 52);
     lv_obj_align(button, LV_ALIGN_TOP_MID, 0, 18);
-    lv_obj_set_style_text_font(button, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(button, &maestro_font_16, 0);
     lv_obj_set_style_text_color(button, lv_color_hex(0xa77dff), 0);
     lv_obj_set_style_text_opa(button, LV_OPA_60, LV_STATE_PRESSED);
     lv_obj_add_flag(button, LV_OBJ_FLAG_USER_1); // Physical hold already goes back.
@@ -870,19 +861,19 @@ void maestro_ui_build(lv_obj_t *parent)
     configASSERT(s_inbox_rows);
     portraits_build();
     s_home_badge = lv_label_create(parent);
-    lv_obj_set_style_text_font(s_home_badge, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(s_home_badge, &maestro_font_16, 0);
     lv_obj_set_style_text_color(s_home_badge, lv_color_hex(0xeeeaf5), 0);
     lv_obj_set_style_bg_color(s_home_badge, lv_color_hex(0x563593), 0);
     lv_obj_set_style_bg_opa(s_home_badge, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(s_home_badge, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_radius(s_home_badge, 0, 0);
     lv_obj_set_style_pad_hor(s_home_badge, 5, 0);
     lv_obj_set_style_pad_ver(s_home_badge, 2, 0);
     lv_obj_align(s_home_badge, LV_ALIGN_CENTER, 140, -118);
     lv_obj_add_flag(s_home_badge, LV_OBJ_FLAG_HIDDEN);
     s_label = lv_label_create(parent);
-    lv_obj_set_style_text_font(s_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(s_label, &maestro_font_16, 0);
     lv_obj_set_style_text_color(s_label, lv_color_hex(0xb7b0cc), 0);
-    lv_obj_set_size(s_label, 270, lv_font_get_line_height(&lv_font_montserrat_16));
+    lv_obj_set_size(s_label, 270, lv_font_get_line_height(&maestro_font_16));
     lv_obj_set_style_text_align(s_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(s_label, LV_LABEL_LONG_MODE_DOTS);
     session_label();
@@ -893,14 +884,14 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_center(s_panel);
     lv_obj_set_style_bg_color(s_panel, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(s_panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_text_font(s_panel, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_radius(s_panel, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_clip_corner(s_panel, true, 0);
+    lv_obj_set_style_text_font(s_panel, &maestro_font_20, 0);
+    // The panel clips the edges. A software circular mask forces LVGL to
+    // allocate and blend an offscreen layer on every scroll frame.
     lv_obj_remove_flag(s_panel, LV_OBJ_FLAG_SCROLLABLE);
     maestro_menu_icons(s_panel);
     maestro_back_button(s_panel, open_list);
     lv_obj_t *title = lv_label_create(s_panel); s_list_title = title;
-    lv_obj_set_style_text_font(title, &lv_font_unscii_16, 0);
+    lv_obj_set_style_text_font(title, &maestro_font_24, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xa77dff), 0);
     lv_obj_set_style_text_letter_space(title, 2, 0);
     lv_label_set_text(title, "AGENTS"); lv_obj_align(title, LV_ALIGN_CENTER, 0, -138);
@@ -915,11 +906,14 @@ void maestro_ui_build(lv_obj_t *parent)
     lv_obj_set_scroll_dir(s_rows, LV_DIR_VER);
     lv_obj_remove_flag(s_rows, LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_ELASTIC);
     lv_obj_set_scrollbar_mode(s_rows, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_add_event_cb(s_rows, curve_rows, LV_EVENT_SCROLL, NULL);
+    lv_obj_add_event_cb(s_rows, rows_scrolled, LV_EVENT_SCROLL, NULL);
     s_list_note = lv_label_create(s_panel);
-    lv_obj_set_style_text_font(s_list_note, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(s_list_note, &maestro_font_16, 0);
     lv_obj_align(s_list_note, LV_ALIGN_TOP_MID, 0, 118);
     lv_obj_add_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
     reader_build();
-    lv_timer_create(ui_tick, 70, NULL);
+#if CONFIG_LV_USE_SNAPSHOT
+    lv_display_add_event_cb(lv_display_get_default(), scroll_benchmark_event, LV_EVENT_ALL, NULL);
+#endif
+    lv_timer_create(ui_tick, 30, NULL);
 }

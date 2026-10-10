@@ -16,7 +16,24 @@ Measured on this Mac on 2026-10-09. These are individual checks, not percentile 
 | Same longer TTS phrase, old process per request | 1,624 ms; 1,238 ms |
 | Same phrase, persistent worker | 1,349 ms cold; 323 ms and 339 ms warm |
 
-The device also polls for the completed result once a second. Network upload and device buffering are outside the local speech measurements.
+Network upload and device buffering are outside the local speech measurements. As of October 10, the device holds each result request for up to one second and the bridge releases it immediately when the answer completes. It no longer adds a fixed one-second sleep between successful polls. Older bridges and network failures retain a bounded request rate.
+
+### October 10 comparison
+
+The same request asked each agent for “Ready when you are,” without tools or file changes. These are single samples measured from the Mac bridge, not full microphone-to-speaker timings or a model leaderboard.
+
+| Agent | Existing test session | New test session | First speech chunk after answer |
+| --- | ---: | ---: | ---: |
+| Claude Code | 2.37 s | 6.89 s | 0.21 s |
+| Codex | 2.99 s | 10.91 s | 0.74 s |
+| Grok Bot | 15.84 s | — | 0.24 s |
+| Dot | 24.47 s | — | 0.24 s |
+| Muse | Not measured in this comparison; it uses the native SDK voice route | — | — |
+| Pi | Not connected | — | — |
+
+Claude was fastest in this check. Reusing a coding session avoids startup work. Grok and Dot use background task delivery followed by a reply callback, so a short message still crosses that extra task path. The first Grok attempt failed to return within two minutes because its Mac connection was offline. Restarting the existing Grok Bot app restored the link, and it delivered the original pending reply without repeating the task. The 15.84-second result is a separate healthy check after reconnection; the outage is not part of that timing.
+
+The reply-wait change removes up to one second of polling delay, not the agent's thinking or tool time. The largest next improvement for long answers is to speak complete answer sentences while generation continues, where the agent exposes them. Streaming recognition while the talk button is held can hide transcription and upload time. [Deepgram's voice pipeline](https://developers.deepgram.com/docs/voice-agent) provides those building blocks over one WebSocket, but plugging it around an existing background agent cannot remove that agent's own queue and callback delay. Keep the selected agent's identity, history and permissions intact.
 
 Grok's routine/return-helper path dominated this check. Changing the codec or voice engine cannot remove that delay. A live voice layer could acknowledge a request promptly while the bot works, but must not imply the bot has finished.
 

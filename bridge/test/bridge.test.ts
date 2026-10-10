@@ -26,6 +26,24 @@ function fixture(fetcher: typeof fetch = async () => new Response('{}')) {
 }
 const auth = { authorization: `Bearer ${config.deviceToken}` };
 
+test('device reply wait returns a completed callback without waiting for its timeout', async () => {
+  const f = fixture(), id = randomUUID();
+  await f.service.submit(id, 'grok', 'Latency check');
+  await f.service.drain();
+  const started = Date.now();
+  const waiting = f.app.inject({ method: 'GET', url: `/api/turns/${id}?wait=5000`, headers: auth });
+  const callback = setTimeout(() => f.service.reply(id, 'Ready.', false), 40);
+  try {
+    const result = await waiting;
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.json().reply, 'Ready.');
+    assert.equal(result.headers['cache-control'], 'no-store');
+    assert.ok(Date.now() - started < 3000);
+    assert.equal((await f.app.inject({ method: 'GET', url: `/api/turns/${id}?wait=6000`, headers: auth })).statusCode, 400);
+    assert.equal((await f.app.inject(`/api/turns/${id}?wait=5000`)).statusCode, 401);
+  } finally { clearTimeout(callback); await f.app.close(); f.store.close(); }
+});
+
 test('speech receives the full reply beyond the old 1800-character cutoff', async () => {
   const f=fixture();let spoken='';
   f.service.speech.speak=async text=>{spoken=text;return Buffer.from([0,0,1,0]);};

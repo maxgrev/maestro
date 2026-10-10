@@ -34,7 +34,7 @@ for path in (ROOT / "firmware/src").rglob("*"):
         dest.parent.mkdir(parents=True, exist_ok=True)
         copy_changed(path, dest)
 # One firmware image for every user. Credentials arrive over USB and stay in NVS.
-edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"\n        "maestro_settings.c"\n        "maestro_avatar.c"\n        "maestro_reply.c"')
+edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"\n        "maestro_settings.c"\n        "maestro_avatar.c"\n        "maestro_reply.c"\n        "maestro_font.c"')
 edit(MUSE / "muse_app.c", '#include "muse_audio.h"', '#include "maestro.h"\n#include "muse_audio.h"')
 edit(MUSE / "muse_app.c", "    muse_state_init();", "    muse_state_init();\n    maestro_init();")
 edit(MUSE / "muse_ui.c", '#include "muse_state.h"', '#include "muse_state.h"\n#include "maestro.h"')
@@ -52,6 +52,26 @@ edit(MUSE / "muse_ui.c", 'muse_board->touch ? LV_SYMBOL_POWER : LV_SYMBOL_LIST',
 edit(MUSE / "muse_ui.c", '        return MODE_NAMES[MUSE_MODE_IDLE];', '        return maestro_idle_label();')
 # Use the native touch settings for both swipe and physical buttons.
 ui = MUSE / "muse_ui.c"
+edit(ui, '#include "maestro.h"', '#include "maestro.h"\n#include "maestro_font.h"')
+# Maestro overlays are siblings of the SDK face. The SDK cannot know they
+# cover it; avoid repainting a 320x320 animation behind scrolling content.
+edit(ui, '    update_chrome(now);', '''    if (maestro_picker_is_open() || maestro_reader_is_open()) return;
+    update_chrome(now);''')
+mic = ui.read_text()
+mic = mic[mic.index('/* A microphone from primitives:'):mic.index('/* Icons beside the physical buttons,')]
+edit(ui, mic, '''static lv_obj_t *make_mic(lv_obj_t *parent, int size)
+{
+    (void)size;
+    lv_obj_t *icon = make_label(parent, &maestro_font_24, COLOR_DIM);
+    lv_label_set_text(icon, MAESTRO_SYMBOL_MIC);
+    return icon;
+}
+static void set_mic_color(uint32_t color)
+{
+    lv_obj_set_style_text_color(s_mic_icon, lv_color_hex(color), 0);
+}
+
+''')
 edit(ui, 'static lv_obj_t *s_speaker;', 'static lv_obj_t *s_speaker;\nstatic lv_obj_t *s_mute_icon;\nstatic void maestro_agents_clicked(lv_event_t *event);\nstatic void maestro_reply_clicked(lv_event_t *event);')
 edit(ui, '    lv_obj_align(s_state_lbl, LV_ALIGN_TOP_MID, 0, s_small ? 22 : 40 + s_dy);',
      '    lv_obj_align(s_state_lbl, LV_ALIGN_CENTER, 0, -138);')
@@ -93,7 +113,7 @@ edit(ui, 'lv_obj_set_flag(s_dots[i], LV_OBJ_FLAG_HIDDEN, page && subpage);', 'lv
 with ui.open("a") as out:
     out.write('\n#include "maestro_ui_navigation.inc"\n')
 settings = MUSE / "muse_settings_ui.c"
-edit(settings, '#include "muse_settings_ui.h"', '#include "muse_settings_ui.h"\n#include "maestro.h"')
+edit(settings, '#include "muse_settings_ui.h"', '#include "muse_settings_ui.h"\n#include "maestro.h"\n#include "maestro_font.h"')
 edit(settings, '#define LIST_W 330', '#define LIST_W 310')
 edit(settings, '#define LIST_TOP 84', '#define LIST_TOP 120')
 edit(settings, '    lv_obj_align(b, LV_ALIGN_TOP_MID, -112, 28);',
@@ -115,6 +135,30 @@ edit(settings, '    row(list, LV_SYMBOL_BLUETOOTH, "Bluetooth", &s_home_ble, on_
      '    row(list, LV_SYMBOL_BLUETOOTH, "Bluetooth", &s_home_ble, on_nav, (void *)&BLE);')
 with settings.open("a") as out:
     out.write('\n#include "maestro_settings_navigation.inc"\n')
+# One bitmap family for native settings, keyboard, pairing, captions and icons.
+# Keep the tiny battery caption and CJK fallback supplied by the SDK.
+for screen in (ui, settings):
+    text = screen.read_text()
+    for old, new in (("lv_font_montserrat_12", "maestro_font_16"),
+                     ("lv_font_montserrat_14", "maestro_font_16"),
+                     ("lv_font_montserrat_16", "maestro_font_16"),
+                     ("lv_font_montserrat_20", "maestro_font_20"),
+                     ("lv_font_montserrat_28", "maestro_font_24"),
+                     ("lv_font_unscii_16", "maestro_font_20")):
+        text = text.replace(old, new)
+    screen.write_text(text)
+edit(settings, 'lv_obj_set_style_radius(c, 18, 0);', 'lv_obj_set_style_radius(c, 0, 0);')
+for widget, old in (("s_text_show",14),("s_text_ta",14)):
+    edit(settings, f'lv_obj_set_style_radius({widget}, {old}, 0);', f'lv_obj_set_style_radius({widget}, 0, 0);')
+edit(settings, 'lv_obj_set_style_radius(s_text_kb, 8, LV_PART_ITEMS);', 'lv_obj_set_style_radius(s_text_kb, 0, LV_PART_ITEMS);')
+edit(settings, '    lv_obj_set_size(sw, 60, 32);', '''    lv_obj_set_size(sw, 60, 32);
+    lv_obj_set_style_radius(sw, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(sw, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(sw, 0, LV_PART_KNOB);''')
+edit(settings, '    lv_slider_set_range(s, lo, hi);', '''    lv_obj_set_style_radius(s, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(s, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(s, 0, LV_PART_KNOB);
+    lv_slider_set_range(s, lo, hi);''')
 avatar = ESP / "avatar/muse_pixel.c"
 edit(avatar, '#include "muse_pixel.h"', '#include "muse_pixel.h"\n#include "maestro_avatar.h"')
 edit(avatar, 'void muse_pixel_render(const muse_pose_t *p)\n{',

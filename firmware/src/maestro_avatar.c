@@ -3,6 +3,7 @@
 #include "muse_mem.h"
 #include "avatars/rle_sprite.h"
 #include "avatars/codex.h"
+#include "avatars/dot.h"
 #include "avatars/sprite_idle.h"
 #include "avatars/sprite_alert.h"
 #include "avatars/sprite_happy.h"
@@ -12,7 +13,7 @@
 #include <math.h>
 #include <string.h>
 
-// Match the StopWatch's character canvas: no intermediate low-resolution image.
+// Native display canvas; shared 4px cells keep added art crisp at integer scale.
 #define SIDE 320
 #define FRAME_PIXELS (CODEX_WIDTH * CODEX_HEIGHT)
 static uint16_t *pixels, *frame;
@@ -32,7 +33,11 @@ static void blit(const uint16_t *data, int width, int height, uint16_t key, int 
     if (width * height > FRAME_PIXELS || w > SIDE || y + h > SIDE) return;
     rle_decode_rgb565(data, frame, width * height);
     for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) {
-        uint16_t c = frame[(j / scale) * width + i / scale];
+        int sx = i / scale, sy = j / scale;
+        // Reuse every original Codex pose, sampled on a fixed 48x52 cell grid.
+        // Never rescale frames independently or introduce blended edge pixels.
+        if (width == CODEX_WIDTH) { sx = sx / 4 * 4 + 2; sy = sy / 4 * 4 + 2; }
+        uint16_t c = frame[sy * width + sx];
         if (c != key) pixels[(y+j)*SIDE+x+i] = c;
     }
 }
@@ -65,18 +70,10 @@ static void codex(const muse_pose_t *p)
     blit(codex_data + codex_offsets[n], CODEX_WIDTH, CODEX_HEIGHT, 0, 1);
 }
 static float coverage(float v) { return fminf(1, fmaxf(0, v)); }
-static unsigned mix(unsigned a, unsigned b, float weight)
-{
-    unsigned r = (unsigned)(((a >> 16) & 255) * (1-weight) + ((b >> 16) & 255) * weight);
-    unsigned g = (unsigned)(((a >> 8) & 255) * (1-weight) + ((b >> 8) & 255) * weight);
-    unsigned blue = (unsigned)((a & 255) * (1-weight) + (b & 255) * weight);
-    return (r << 16) | (g << 8) | blue;
-}
 static void grok(const muse_pose_t *p)
 {
-    // A circular silhouette with expressive eyes, inspired by the Grok mascot.
-    // Flat charcoal avoids RGB565 bands; only the edge is antialiased.
-    const unsigned body = 0x181818, rim = 0x383838;
+    // A circle on a fixed cell grid, with the same expressive state-driven eyes.
+    const unsigned body = 0x20202b, rim = 0x545268;
     float enter = 1 - expf(-p->mode_t * 5);
     float happy = p->mode == MUSE_MODE_IDLE ? coverage(p->happy) : 0;
     float level = coverage(p->level);
@@ -106,22 +103,16 @@ static void grok(const muse_pose_t *p)
     }
     cy -= happy * 7;
     angle += happy * sinf(p->t * 9) * .16f;
-    const uint16_t body_pixel = color(body);
-    for (int y = 87; y < 283; y++) for (int x = 63; x < 258; x++) {
+    for (int y = 88; y < 284; y += 4) for (int x = 64; x < 260; x += 4) {
         float dx = x - cx, dy = y - cy, squared = dx*dx + dy*dy;
-        if (squared < (radius-1.5f)*(radius-1.5f)) {
-            pixels[y*SIDE+x] = body_pixel;
-            continue;
-        }
-        float d = sqrtf(squared), alpha = coverage(radius - d + .5f);
-        if (alpha > 0) pixels[y*SIDE+x] = color(mix(0, mix(body, rim, coverage(d-radius+1.5f)), alpha));
+        if (squared < radius*radius) box(x, y, 4, 4, squared < (radius-4)*(radius-4) ? body : rim);
     }
     float cs = cosf(angle), sn = sinf(angle);
     for (int eye = 0; eye < 2; eye++) {
         float local_x = eye ? 38 : -1, local_y = -34;
         float ex = cx + local_x*cs - local_y*sn + look_x;
         float ey = cy + local_x*sn + local_y*cs + look_y;
-        for (int y = (int)ey-34; y <= (int)ey+34; y++) for (int x = (int)ex-34; x <= (int)ex+34; x++) {
+        for (int y = ((int)ey-36)/4*4; y <= (int)ey+36; y += 4) for (int x = ((int)ex-36)/4*4; x <= (int)ex+36; x += 4) {
             float dx = x-ex, dy = y-ey, u = dx*cs+dy*sn, v = -dx*sn+dy*cs;
             // Pet/completion reaction: two smiling arches; work states always win.
             float curve = -7 + u*u*.055f;
@@ -133,36 +124,41 @@ static void grok(const muse_pose_t *p)
                 float end = fmaxf(fabsf(v)-height, 0);
                 eye_alpha = coverage(7.5f - sqrtf(u*u + end*end));
             }
-            if (eye_alpha > 0 && x >= 0 && x < SIDE && y >= 0 && y < SIDE)
-                pixels[y*SIDE+x] = color(mix(body, 0xf2f2ef, eye_alpha));
+            if (eye_alpha >= .5f) box(x, y, 4, 4, 0xf2f2ef);
         }
     }
 }
 static void pi(const muse_pose_t *p)
 {
     // Pi's official three-color mark (pi.dev/logo-auto.svg).
-    int dy=(int)roundf(sinf(p->t*2)), x=84, y=126+dy, s=38;
+    int dy=sinf(p->t*2) > .6f ? -4 : 0, x=88, y=128+dy, s=36;
     box(x,y,s*3,s,0xf09082); box(x+s*2,y+s,s,s,0xf09082);
     box(x,y+s,s,s*3,0x4d9abf); box(x+s,y+s*2,s,s,0x4d9abf);
-    int lift=p->mode==MUSE_MODE_SPEAKING?(int)(p->level*5):p->mode==MUSE_MODE_THINKING?(int)(sinf(p->t*5)*3):0;
+    int lift=p->mode==MUSE_MODE_SPEAKING?(int)(p->level*2)*4:p->mode==MUSE_MODE_THINKING?(int)(sinf(p->t*5)*2)*4:0;
     box(x+s*3,y+s*2-lift,s,s*2,0xf1be58);
 }
 static void dot(const muse_pose_t *p)
 {
-    // The owner's Dot is the pale ring. Draw at panel resolution, with a soft
-    // edge and a moving center; keep its silhouette distinct from Grok's face.
-    float level = coverage(p->level), cx = 160, cy = 185 + sinf(p->t * 1.5f) * 2;
-    float radius = 82 + sinf(p->t * 1.5f), hole = 30, dx = 0, dy = 0;
-    if (p->mode == MUSE_MODE_LISTENING) { hole += 4 + level * 5; dy = -6; }
-    if (p->mode == MUSE_MODE_THINKING) { dx = sinf(p->mode_t * 2) * 9; dy = cosf(p->mode_t * 2) * 9; }
-    if (p->mode == MUSE_MODE_SPEAKING) { radius += level * 5; hole += level * 9; }
-    if (p->mode == MUSE_MODE_ERROR) { dx = sinf(p->mode_t * 12) * 5 * expf(-p->mode_t); hole = 21; }
-    if (p->mode == MUSE_MODE_OFF) hole = 12;
-    const unsigned body = p->mode == MUSE_MODE_OFF ? 0x777d91 : 0xbdc4db;
-    for (int y = 90; y < 280; y++) for (int x = 65; x < 255; x++) {
-        float ox = x - cx, oy = y - cy, ix = ox - dx, iy = oy - dy;
-        float alpha = coverage(radius - sqrtf(ox*ox + oy*oy) + .5f) * coverage(sqrtf(ix*ix + iy*iy) - hole + .5f);
-        if (alpha > 0) pixels[y * SIDE + x] = color(mix(0, body, alpha));
+    int x = 64, y = 92 + (sinf(p->t*1.5f) > .5f ? 4 : 0);
+    if (p->mode == MUSE_MODE_LISTENING) y -= 4;
+    if (p->mode == MUSE_MODE_SPEAKING) y -= (int)(coverage(p->level)*2)*4;
+    if (p->mode == MUSE_MODE_ERROR) x += (int)(sinf(p->mode_t*12)*2)*4;
+    if (p->mode == MUSE_MODE_OFF) y += 4;
+    for (int row = 0; row < 48; row++) for (int col = 0; col < 48; col++) {
+        uint16_t c = dot_sprite[row*48+col];
+        if (!c) continue;
+        if (p->mode == MUSE_MODE_OFF) c = (c & 0xf7de) >> 1;
+        for (int dy = 0; dy < 4; dy++) for (int dx = 0; dx < 4; dx++)
+            pixels[(y+row*4+dy)*SIDE+x+col*4+dx] = c;
+    }
+    if (p->mode == MUSE_MODE_THINKING) {
+        int step = (int)(p->mode_t*4) % 3;
+        for (int i = 0; i < 3; i++) box(144+i*12, 292, 8, 4, i == step ? 0x93ffe1 : 0x235f54);
+    } else if (p->mode == MUSE_MODE_LISTENING || (p->mode == MUSE_MODE_IDLE && p->happy > .2f)) {
+        // One small glint answers a tap or a listening transition.
+        if ((int)(p->mode_t*4) % 4 < 2) {
+            box(124, 172, 12, 4, 0xc6ffee); box(128, 168, 4, 12, 0xc6ffee);
+        }
     }
 }
 bool maestro_avatar_render(const muse_pose_t *p)

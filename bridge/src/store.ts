@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { UserError, type State, type Target, type Turn } from './types.js';
 import { Inbox } from './inbox.js';
 
@@ -7,6 +8,7 @@ type Row = { id: string; fingerprint: string; target: string; state: State; text
 const decode = ({ fingerprint: _fingerprint, ...row }: Row): Turn => ({ ...row, target: JSON.parse(row.target) as Target });
 
 export class Store {
+  private readonly changes = new EventEmitter();
   readonly db: DatabaseSync;
   readonly inbox: Inbox;
   constructor(path: string) {
@@ -48,6 +50,25 @@ export class Store {
     this.expireCallbacks();
     const row = this.db.prepare('SELECT * FROM turns WHERE id=?').get(id) as Row | undefined;
     return row && decode(row);
+  }
+  waitForReply(id: string, milliseconds: number, signal?: AbortSignal): Promise<Turn | undefined> {
+    const current = this.get(id);
+    const pending = (turn?: Turn) => turn && ['queued', 'transcribing', 'dispatching', 'working'].includes(turn.state);
+    if (!pending(current) || milliseconds <= 0 || signal?.aborted) return Promise.resolve(current);
+    return new Promise(resolve => {
+      const finish = () => {
+        clearTimeout(timer);
+        this.changes.off(id, changed);
+        this.changes.off('closing', finish);
+        signal?.removeEventListener('abort', finish);
+        resolve(this.get(id));
+      };
+      const changed = (turn: Turn) => { if (!pending(turn)) finish(); };
+      const timer = setTimeout(finish, milliseconds);
+      this.changes.on(id, changed);
+      this.changes.on('closing', finish);
+      signal?.addEventListener('abort', finish, { once: true });
+    });
   }
   list(): Turn[] { this.expireCallbacks(); return (this.db.prepare('SELECT * FROM turns ORDER BY created DESC LIMIT 50').all() as Row[]).map(decode); }
   conversationHistory(targetId: string) {
@@ -103,7 +124,8 @@ export class Store {
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     const { sourceKey: _key, ...turn } = next;
+    this.changes.emit(turn.id, turn);
     return turn;
   }
-  close() { this.db.close(); }
+  close() { this.changes.emit('closing'); this.db.close(); }
 }

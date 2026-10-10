@@ -25,21 +25,13 @@ static void portraits_build(void)
         int span = LV_MAX(right - left + 1, bottom - top + 1);
         left -= (span - (right - left + 1)) / 2;
         top -= (span - (bottom - top + 1)) / 2;
-        for (int y = 2; y < THUMB - 2; y++) for (int x = 2; x < THUMB - 2; x++) {
-            unsigned red = 0, green = 0, blue = 0, count = 0, covered = 0;
-            // Area sampling keeps Codex's small facial details and Grok's round edge.
-            int x0 = left + (x - 2) * span / (THUMB - 4), x1 = left + (x - 1) * span / (THUMB - 4);
-            int y0 = top + (y - 2) * span / (THUMB - 4), y1 = top + (y - 1) * span / (THUMB - 4);
-            for (int sy = y0; sy < y1; sy++) for (int sx = x0; sx < x1; sx++) {
-                count++;
-                uint16_t c = sx >= 0 && sx < 320 && sy >= 0 && sy < 320 ? source[sy * 320 + sx] : 0;
-                if (!c) continue;
-                covered++; red += c >> 11; green += (c >> 5) & 63; blue += c & 31;
-            }
-            if (covered) {
-                ((uint16_t *)data)[y * THUMB + x] = (red / covered << 11) | (green / covered << 5) | blue / covered;
-                data[THUMB * THUMB * 2 + y * THUMB + x] = covered * 255 / count;
-            }
+        for (int y = 4; y < THUMB - 4; y++) for (int x = 4; x < THUMB - 4; x++) {
+            // A 48-cell portrait, sampled once without blended outlines.
+            int sx = left + ((x - 4) * 2 + 1) * span / 96;
+            int sy = top + ((y - 4) * 2 + 1) * span / 96;
+            uint16_t c = sx >= 0 && sx < 320 && sy >= 0 && sy < 320 ? source[sy * 320 + sx] : 0;
+            ((uint16_t *)data)[y * THUMB + x] = c;
+            data[THUMB * THUMB * 2 + y * THUMB + x] = c ? 255 : 0;
         }
     }
     free(source);

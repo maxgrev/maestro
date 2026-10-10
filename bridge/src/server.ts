@@ -83,11 +83,17 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     return { ok: true };
   });
   app.get('/api/turns', async () => ({ turns: service.store.list() }));
-  app.get('/api/turns/:id', async req => {
+  app.get('/api/turns/:id', async (req, reply) => {
     const { id } = z.object({ id: requestId }).parse(req.params);
-    const turn = service.store.get(id);
-    if (!turn) throw new UserError('Request not found.', 404);
-    return turn;
+    const { wait } = z.object({ wait: z.coerce.number().int().min(0).max(5000).default(0) }).strict().parse(req.query);
+    const abort = new AbortController();
+    const closed = () => abort.abort();
+    reply.raw.once('close', closed);
+    try {
+      const turn = await service.store.waitForReply(id, wait, abort.signal);
+      if (!turn) throw new UserError('Request not found.', 404);
+      return reply.header('Cache-Control', 'no-store').send(turn);
+    } finally { reply.raw.off('close', closed); }
   });
   app.post('/api/turns', async (req, reply) => {
     const body = z.object({ id: requestId, target: z.string().min(1).max(250), text: z.string().min(1).max(8000) }).strict().parse(req.body);
