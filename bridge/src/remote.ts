@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
+import { Resolver } from 'node:dns/promises';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { get } from 'node:https';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { localDir, type Config } from './config.js';
@@ -29,11 +31,41 @@ const serveSchema = z.object({
 type Serve = z.infer<typeof serveSchema>;
 export type RemoteState = { installed: boolean; connected: boolean; enabled: boolean; available: boolean; url?: string; approvalUrl?: string; message: string };
 
+// MagicDNS resolves this Mac's name to its private Tailscale IP. Probe the public
+// relay instead, using the same IPv4 route as the StopWatch and normal TLS checks.
+const publicRequest: typeof fetch = (input, options) => new Promise((resolve, reject) => {
+  const dns = new Resolver({ timeout: 2000, tries: 2 });
+  dns.setServers(['1.1.1.1', '8.8.8.8']);
+  const request = get(String(input), {
+    agent: false, family: 4,
+    headers: Object.fromEntries(new Headers(options?.headers)), signal: options?.signal ?? undefined,
+    lookup: (hostname, settings, callback) => {
+      dns.resolve4(hostname).then(addresses => {
+        if (!addresses.length) throw new Error('Public DNS is not ready');
+        if (settings.all) callback(null, addresses.map(address => ({ address, family: 4 })));
+        else callback(null, addresses[0]!, 4);
+      }).catch(error => callback(error, '', 4));
+    },
+  }, async response => {
+    try {
+      const chunks: Buffer[] = []; let bytes = 0;
+      for await (const chunk of response) {
+        bytes += chunk.length;
+        if (bytes > 8192) throw new Error('Unexpected probe response');
+        chunks.push(chunk);
+      }
+      resolve(new Response(Buffer.concat(chunks), { status: response.statusCode }));
+    } catch (error) { response.destroy(); reject(error); }
+  });
+  request.once('error', reject);
+  request.once('close', () => dns.cancel());
+});
+
 export class RemoteAccess {
   private busy = false;
   private approvalUrl?: string;
   constructor(private config: Config, private data = localDir, private run: TailscaleRunner = runTailscale,
-    private installed = () => !!tailscaleBinary(), private request: typeof fetch = fetch) {}
+    private installed = () => !!tailscaleBinary(), private request: typeof fetch = publicRequest) {}
   saved() {
     const path = resolve(this.data, 'remote.json');
     if (!existsSync(path)) return undefined;
