@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { configSchema, localDir, type Config } from './config.js';
 import { UserError } from './types.js';
 import { voices } from './speech.js';
+import { RemoteAccess } from './remote.js';
 
 export type DeviceResult = Record<string, unknown>;
 export type DeviceRunner = (input: Record<string, unknown>, progress: (message: string) => void) => Promise<DeviceResult>;
@@ -49,7 +50,10 @@ export type SetupJob = { id: string; action: string; state: 'working' | 'done' |
 export class Onboarding {
   private job?: SetupJob;
   private device?: DeviceResult;
-  constructor(private config: Config, private run: DeviceRunner = runDevice, private data = localDir) {}
+  readonly remote: RemoteAccess;
+  constructor(private config: Config, private run: DeviceRunner = runDevice, private data = localDir) {
+    this.remote = new RemoteAccess(config, data);
+  }
   async state() {
     const devices = await this.run({ action: 'ports' }, () => {});
     return { ...devices, job: this.job, device: this.device,
@@ -57,6 +61,7 @@ export class Onboarding {
       grok: !!this.config.grok, projects: this.config.projects, agents: this.config.agents,
       voices, voice: this.config.speech.engine === 'kokoro' ? this.config.speech.neuralVoice ?? 'af_heart' : 'Samantha',
       firmware: existsSync(resolve(process.env.MAESTRO_FIRMWARE ?? 'firmware/build/sdk/esp32/build-maestro', 'maestro-manifest.json')),
+      remote: this.remote.saved(),
     };
   }
   start(body: unknown) {
@@ -65,6 +70,7 @@ export class Onboarding {
     const job: SetupJob = { id: randomUUID(), action: input.action, state: 'working', message: input.action === 'install' ? 'Checking the firmware and recovery copy…' : 'Connecting to your StopWatch…' };
     let command: Record<string, unknown> = input;
     if (input.action === 'configure') {
+      const remote = this.remote.saved();
       const device = JSON.parse(readFileSync(resolve(this.data, 'device.json'), 'utf8'));
       const ca = readFileSync(resolve(this.data, 'bridge-cert.pem'), 'utf8');
       const host = hostname();
@@ -73,8 +79,8 @@ export class Onboarding {
       if (/^https:\/\/[0-9.]+:/.test(device.url) && host.endsWith('.local')) {
         try { if (new X509Certificate(ca).checkHost(host)) device.url = `https://${host}:${this.config.port}`; } catch { /* The device will report a bad certificate. */ }
       }
-      command = { ...input, config: { url: device.url, token: this.config.deviceToken,
-        ca,
+      command = { ...input, config: { url: remote?.url ?? device.url, token: this.config.deviceToken,
+        ca: remote ? '' : ca, ...(remote ? { trust: 'public' } : {}),
         muse: existsSync(resolve(this.data, 'muse-sdk-token')) ? readFileSync(resolve(this.data, 'muse-sdk-token'), 'utf8').trim() : '',
       } };
     }

@@ -7,11 +7,11 @@ A voice remote for the **M5Stack StopWatch C152**. Choose an agent, hold yellow 
 Open `dist/Maestro.app`. It starts the bridge and opens one guided flow:
 
 1. **Device:** connect USB, check the board, and install firmware. Maestro verifies a recovery copy before writing.
-2. **Wi-Fi:** enter a 2.4 GHz network or keep the device's verified saved network.
+2. **Wi-Fi:** enter a 2.4 GHz network or phone hotspot. Under **Away from home**, install and sign in to Tailscale, then enable remote access. Keep the home connection if you only use Maestro nearby.
 3. **Agents:** pair Muse, connect a Grok Bot routine, or install and sign in to coding agents. Choose a project folder with the Mac folder picker. Codex needs your explicit folder-trust choice; its tool approvals still apply.
 4. **Try it:** check the device and Mac connection, open the agent list, and try a short message.
 
-The app stays running when its window closes. Use its menu-bar item to reopen it. Quitting the app stops its bridge; Herdr keeps its conversations. Keep the Mac awake and on the same network for Grok, coding agents, and spoken replies.
+The app stays running when its window closes and prevents idle system sleep while open. Use its menu-bar item to reopen it. Quitting the app stops its bridge; Herdr keeps its conversations. With remote access enabled, the Mac can stay at home. Leave it powered, online, and with its lid open; keep Maestro, Tailscale, and Grok Bot's Mac connection running.
 
 This package targets **Apple Silicon macOS**. It includes its runtimes and speech model; no Homebrew or terminal is needed to run it. The development app has a local signature. A public release still needs a Developer ID signature, notarization, and distribution review of bundled third-party licenses. Do not tell users to bypass Gatekeeper.
 
@@ -54,9 +54,11 @@ The StopWatch streams 16 kHz PCM; Muse reuses the SDK's MP3 decoder. Speech no l
 
 A downloaded app uses `~/Library/Application Support/Maestro`. A development app built under this checkout reuses its existing `.local` directory. The app remembers that location. Data includes the SQLite request history, private configuration, certificate, recovery copies, and tool installs. `MAESTRO_DATA` selects another directory for command-line development.
 
-The local page uses loopback HTTP port 4210. The device uses authenticated HTTPS port 4211 with a pinned certificate. Setup saves the URL, certificate, bearer token, and personal Muse SDK token to device NVS over USB. The generic firmware contains no personal credentials. Bonjour resolves the Mac's `.local` name when its certificate covers that name; numeric addresses remain supported.
+The local page uses loopback HTTP port 4210. Home connections use authenticated HTTPS port 4211 with a pinned certificate. Remote access uses Tailscale Funnel's stable HTTPS address, forwarded to an authenticated device-only origin on loopback port 4212. The setup page and its routes are absent from that origin. Never tunnel port 4210.
 
-The certificate expires after one year. Renew it and use **Save to StopWatch** to provision the new pin. Do not disable certificate checks. The device uses SNTP for TLS time. The current build uses the local network. See [voice measurements and portable-access options](docs/voice-and-portability.md) for the next step toward use away from home.
+Setup verifies public authentication and route isolation before saving a remote address. It refuses to replace another Tailscale service. **Save to StopWatch** sends the address, device key, and Muse SDK token over USB. Remote firmware uses ESP-IDF's certificate bundle with hostname validation; home firmware keeps its certificate pin. The generic image contains no personal credentials. Turning remote access off removes only Maestro's matching share; save again over USB to restore the home address.
+
+The home certificate expires after one year. Renew it and use **Save to StopWatch** to provision the new pin. Tailscale manages remote certificate renewal. The device uses SNTP for TLS time. A phone hotspot lets it travel without changing the saved Wi-Fi each time. Use **Maximize Compatibility** on iPhone for 2.4 GHz. The device currently saves one Wi-Fi network; new network details still need USB. See [voice measurements and portable access](docs/voice-and-portability.md).
 
 Device NVS and flash encryption remain off for recoverable development. Physical flash access can expose saved Wi-Fi and account credentials. Keep runtime data and recovery images private. Git ignores `.local`, tool caches, build output, and packaged apps.
 

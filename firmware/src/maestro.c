@@ -13,6 +13,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_sntp.h"
+#include "esp_crt_bundle.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/idf_additions.h"
@@ -109,7 +110,9 @@ static esp_http_client_handle_t open_http(const char *path, const char *type, co
     snprintf(url, sizeof(url), "%s%s", maestro_url(), path);
     snprintf(auth, sizeof(auth), "Bearer %s", maestro_token());
     esp_http_client_config_t cfg = {
-        .url = url, .cert_pem = maestro_ca(), .timeout_ms = !strcmp(path, "/api/speech") ? 60000 : 15000,
+        .url = url, .cert_pem = maestro_public_ca() ? NULL : maestro_ca(),
+        .crt_bundle_attach = maestro_public_ca() ? esp_crt_bundle_attach : NULL,
+        .timeout_ms = !strcmp(path, "/api/speech") ? 60000 : 15000,
         .disable_auto_redirect = true, .buffer_size = 4096,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
@@ -760,7 +763,8 @@ bool maestro_console(const char *line, bool whole)
         if (ok) atomic_store(&s_reboot, true);
     } else if (!strcmp(line, "maestro.status")) {
         cJSON *json = cJSON_CreateObject();
-        cJSON_AddNumberToObject(json, "version", 2);
+        cJSON_AddNumberToObject(json, "version", 3);
+        cJSON_AddBoolToObject(json, "remote", maestro_public_ca());
         cJSON_AddBoolToObject(json, "configured", maestro_url()[0]);
         cJSON_AddBoolToObject(json, "bridge", atomic_load(&s_bridge_online));
         cJSON_AddBoolToObject(json, "picker", atomic_load(&s_picker_open));

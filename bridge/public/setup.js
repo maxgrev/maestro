@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let state, busy = false, port = '', lastPorts = '';
+let state, remoteState, busy = false, port = '', lastPorts = '';
 async function api(path, body) {
   const response = await fetch(path, body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {});
   const value = await response.json(); if(!response.ok) throw new Error(value.error || 'Could not complete this step.'); return value;
@@ -8,6 +8,7 @@ function show(step) {
   document.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==step);
   document.querySelectorAll('[data-step]').forEach(b=>b.dataset.step===step?b.setAttribute('aria-current','step'):b.removeAttribute('aria-current'));
   $('setup-error').textContent='';
+  if(step==='wifi')void checkRemote();
 }
 function lock(on) { busy=on; document.querySelectorAll('button,input,select').forEach(e=>e.disabled=on); if(!on) render(); }
 function render() {
@@ -22,11 +23,13 @@ function render() {
   }
   const d=state.device?.port===port ? state.device : null;
   $('device-state').textContent=d?'StopWatch found. '+(d.maestro.version>=2?'Maestro is installed.':'A firmware update is needed.'):'Connect to check your device.';
+  $('device-state').classList.toggle('check-result',!!d&&d.maestro.version>=2);
   $('device-next').disabled=busy||!d||d.maestro.version<2;
   $('install-area').hidden=!port||!state.firmware;
   $('install').disabled=busy||!$('confirm-model').checked;
   $('inspect').disabled=busy||!port;
   $('wifi-state').textContent=d?.wifi.state==='connected'?'Connected to '+d.wifi.ssid: 'Wi-Fi has not been checked yet.';
+  $('wifi-state').classList.toggle('check-result',d?.wifi.state==='connected');
   $('keep-wifi').hidden=d?.wifi.state!=='connected';
   $('muse-state').textContent=d?.link.paired?'Paired':state.muse?'Token saved':'Add token';
   $('muse-device').textContent=d?.name||'your StopWatch';
@@ -36,6 +39,7 @@ function render() {
   if(!$('voice').dataset.edited)$('voice').value=state.voice;
   $('voice-state').textContent=(state.voices||[]).find(v=>v.id===state.voice)?.name||'Local speech';
   $('sync-device').disabled=busy||!d||d.maestro.version<2;
+  $('connection-save-help').textContent=state.remote?'Saves the remote connection and Muse token, then restarts your device.':'Saves the home connection and Muse token, then restarts your device.';
   $('check-pair').disabled=busy||!port;
   $('verify').disabled=busy||!port;
   $('open-agents').disabled=busy||!d?.maestro.bridge;
@@ -44,7 +48,27 @@ function render() {
   for(const [name,value] of [['Device',d?'Connected over USB':'Connect USB to check'],['Wi-Fi',!d?'Not checked':d.wifi.state==='connected'?d.wifi.ssid:'Not connected'],['Mac bridge',!d?'Not checked':d.maestro.bridge?'Connected':'Not connected'],['Muse',!d?'Not checked':d.link.paired?'Paired':'Not paired'],['On the screen',d?.maestro.name||'Not checked']]){
     const row=document.createElement('p'),label=document.createElement('strong'),text=document.createElement('span');label.textContent=name;text.textContent=value;row.append(label,text);$('ready-checks').append(row);
   }
+  renderRemote();
 }
+function renderRemote(){
+  if(!remoteState)return;
+  $('remote-state').textContent=remoteState.message;
+  $('remote-install').hidden=remoteState.installed;
+  $('remote-enable').hidden=!remoteState.installed;
+  $('remote-enable').disabled=busy||!remoteState.connected;
+  $('remote-enable').textContent=remoteState.enabled&&remoteState.available?'Verify remote access':'Enable remote access';
+  $('remote-disable').hidden=!remoteState.enabled&&!remoteState.available;
+  $('remote-approve').hidden=!remoteState.approvalUrl;
+  if(remoteState.approvalUrl)$('remote-approve').href=remoteState.approvalUrl;
+  $('remote-address').hidden=!remoteState.url;
+  $('remote-address').textContent=remoteState.url||'';
+}
+async function checkRemote(){try{remoteState=await api('/api/setup/remote');renderRemote();}catch{$('remote-state').textContent='Could not check remote access. Try again.';}}
+$('remote-check').onclick=()=>run(checkRemote);
+for(const action of ['enable','disable'])$('remote-'+action).onclick=()=>run(async()=>{
+  $('remote-state').textContent=action==='enable'?'Checking the secure connection…':'Turning off remote access…';
+  remoteState=await api('/api/setup/remote',{action});await refresh();renderRemote();
+});
 async function refresh(){state=await api('/api/setup');render();}
 async function run(fn){if(busy)return;lock(true);$('setup-error').textContent='';try{await fn();}catch(e){$('setup-error').textContent=e.message;}finally{lock(false);}}
 async function operation(action,fields={}){

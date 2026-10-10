@@ -74,6 +74,11 @@ export function buildServer(service: Service, options: { local?: boolean; https?
       const setup = options.onboarding;
       app.get('/api/setup', () => setup.state());
       app.get('/api/setup/grok-guide', async () => setup.grokGuide());
+      app.get('/api/setup/remote', () => setup.remote.state());
+      app.post('/api/setup/remote', async req => {
+        const { action } = z.object({ action: z.enum(['enable', 'disable']) }).strict().parse(req.body);
+        return setup.remote.change(action);
+      });
       app.post('/api/setup/device', async (req, reply) => reply.code(202).send(setup.start(req.body)));
       app.post('/api/setup/agents', async req => setup.saveAgents(req.body));
       const agents=new AgentSetup();

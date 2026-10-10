@@ -28,9 +28,25 @@
         <div class="step-footer"><button id="device-next" disabled>Continue to Wi-Fi →</button></div>
       </section>
       <section data-panel="wifi" hidden>
-        <h2>Join your Wi-Fi</h2><p>Use a 2.4 GHz network that your Mac can also reach.</p>
+        <h2>Take your agents with you</h2><p>Join a 2.4 GHz Wi-Fi network or phone hotspot. Enable remote access below to reach your Mac from another network.</p>
+        <section class="remote-access" aria-labelledby="remote-heading">
+          <h3 id="remote-heading">Away from home</h3>
+          <p>Leave Maestro and Tailscale open on your Mac at home. Your StopWatch connects securely over the internet.</p>
+          <p id="remote-state" role="status">Checking remote access…</p>
+          <div class="remote-actions">
+            <a id="remote-install" href="https://tailscale.com/download/mac" target="_blank" rel="noreferrer" hidden>Get Tailscale ↗</a>
+            <a id="remote-approve" target="_blank" rel="noreferrer" hidden>Approve in Tailscale ↗</a>
+            <button id="remote-enable" class="secondary" hidden>Enable remote access</button>
+            <button id="remote-check" class="secondary">Check again</button>
+            <button id="remote-disable" class="text-button" hidden>Turn off</button>
+          </div>
+          <p id="remote-address" class="field-help" hidden></p>
+          <p class="field-help">Keep your Mac powered with its lid open. Maestro prevents idle sleep while it runs. Only a StopWatch with your device key can use the connection.</p>
+        </section>
+        <h3>Device Wi-Fi</h3>
         <p id="wifi-state" class="check-result"></p><button id="keep-wifi" class="secondary" hidden>Use this network</button>
         <form id="wifi-form"><label for="ssid">Wi-Fi name</label><input id="ssid" required maxlength="32" autocomplete="off"><label for="wifi-password">Wi-Fi password</label><input id="wifi-password" type="password" maxlength="64" autocomplete="off"><p class="field-help">Leave the password blank for an open network.</p><button>Connect Wi-Fi</button></form>
+        <p class="field-help">For an iPhone hotspot, turn on Maximize Compatibility. This replaces the device’s saved network; it reconnects when that network is available. New Wi-Fi details currently need USB.</p>
       </section>
       <section data-panel="agents" hidden>
         <h2>Bring your agents</h2><p>Connect any you use. You can add more later.</p>
@@ -56,7 +72,7 @@
           <form id="voice-form"><label for="voice">Reply voice</label><select id="voice"></select><div class="field-row"><button type="button" id="voice-preview" class="secondary">Preview voice</button><button>Save voice</button></div></form>
           <audio id="voice-audio" controls hidden></audio><p id="voice-message" role="status"></p>
         </details>
-        <div class="step-footer"><button id="sync-device">Save to StopWatch →</button><p class="field-help">Saves the Mac connection and Muse token, then restarts your device.</p></div>
+        <div class="step-footer"><button id="sync-device">Save to StopWatch →</button><p id="connection-save-help" class="field-help">Saves the Mac connection and Muse token, then restarts your device.</p></div>
       </section>
       <section data-panel="ready" hidden>
         <h2>Meet your agents</h2><p id="ready-description">Check the device connection, then press blue to see your agents.</p><div id="ready-checks" class="ready-checks"></div><button id="verify">Check connection</button><button id="open-agents" class="secondary" disabled>Show agents on StopWatch</button>

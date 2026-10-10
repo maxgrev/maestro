@@ -12,7 +12,7 @@ import { buildServer } from '../src/server.js';
 import type { SpeechEngine } from '../src/speech.js';
 
 const config: Config = {
-  deviceToken: 'a'.repeat(64), host: '127.0.0.1', port: 4211, localPort: 4210,
+  deviceToken: 'a'.repeat(64), host: '127.0.0.1', port: 4211, localPort: 4210, remotePort: 4212,
   herdr: { binary: '/unused', session: 'test' }, projects: [], agents: ['codex'],
   speech: { whisper: '/unused', model: '/unused', ffmpeg: '/unused', voice: 'Samantha' },
   grok: { name: 'Daily assistant', webhook: 'https://example.com/hook', key: 'secret', replyKey: 'b'.repeat(64) },

@@ -20,7 +20,7 @@ if (!existsSync(resolve(localDir, 'bridge-cert.pem'))) {
 }
 if (!existsSync(resolve(localDir, 'config.json'))) {
   const config: Config = {
-    deviceToken: randomBytes(32).toString('hex'), host: '0.0.0.0', port: 4211, localPort: 4210,
+    deviceToken: randomBytes(32).toString('hex'), host: '0.0.0.0', port: 4211, localPort: 4210, remotePort: 4212,
     herdr: { binary: resolve('.tools/herdr'), session: 'maestro', configPath: resolve(localDir, 'herdr/config.toml') },
     projects: [{ id: 'maestro', name: 'Maestro', path: resolve('.') }], agents: ['codex', 'claude', 'pi'],
     ...(existsSync(resolve('.tools/codex')) ? { codexBinary: resolve('.tools/codex') } : {}),

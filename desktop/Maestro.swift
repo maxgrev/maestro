@@ -7,6 +7,7 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
     private var web: WKWebView!
     private var server: Process?
     private var statusItem: NSStatusItem!
+    private var awake: NSObjectProtocol?
     private var localURL = URL(string: "http://localhost:4210/setup.html")!
     static func main() {
         let app = NSApplication.shared
@@ -16,6 +17,7 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
         app.run()
     }
     func applicationDidFinishLaunching(_ note: Notification) {
+        awake = ProcessInfo.processInfo.beginActivity(options: [.idleSystemSleepDisabled], reason: "Keep your Maestro agents available while the app is open")
         let menu = NSMenu(), appMenu = NSMenu(), item = NSMenuItem()
         menu.addItem(item); item.submenu = appMenu
         appMenu.addItem(withTitle: "Open Maestro", action: #selector(showWindow), keyEquivalent: "0")
@@ -45,7 +47,10 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
     @objc private func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool { showWindow(); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
-    func applicationWillTerminate(_ note: Notification) { server?.terminate() }
+    func applicationWillTerminate(_ note: Notification) {
+        server?.terminate()
+        if let awake { ProcessInfo.processInfo.endActivity(awake) }
+    }
     private func start() {
         guard let resources = Bundle.main.resourceURL else { return }
         let fm = FileManager.default

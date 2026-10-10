@@ -8,6 +8,7 @@ export const configSchema = z.object({
   host: z.string().default('0.0.0.0'),
   port: z.number().int().min(1024).max(65535).default(4211),
   localPort: z.number().int().min(1024).max(65535).default(4210),
+  remotePort: z.number().int().min(1024).max(65535).default(4212),
   herdr: z.object({ binary: z.string(), session: z.string().regex(/^[a-zA-Z0-9_-]+$/), configPath: z.string().optional() }),
   projects: z.array(z.object({ id: z.string().regex(/^[a-z0-9_-]+$/), name: z.string().min(1).max(60), path: z.string().refine(s => s.startsWith('/')), trusted: z.boolean().optional() })).default([]),
   agents: z.array(z.enum(['codex', 'claude', 'pi'])).default(['codex', 'claude', 'pi']),

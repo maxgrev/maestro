@@ -5,7 +5,7 @@ Goal: someone with no coding experience can connect the StopWatch and talk to th
 The Mac app now runs this flow:
 
 1. **Connect your StopWatch.** Detect the board over USB, save a recovery image for its chip MAC, verify checksums, and install generic firmware. Show each operation's progress. A retry requires a new click.
-2. **Connect to Wi-Fi.** Ask once, send credentials directly to the device, and verify that the device can reach the Mac. Discover the Mac on the local network so an IP change does not require flashing again.
+2. **Connect to Wi-Fi.** Save a 2.4 GHz network or phone hotspot. The Away from home section checks Tailscale, guides its account steps, and enables a stable HTTPS connection. Verify the authenticated route before saving it to the StopWatch. Local-only use keeps the Mac's Bonjour address and certificate pin.
 3. **Connect your agents.** Show installed agents and the account steps each one needs. Reuse provider login commands and existing sessions. Install pinned official coding-agent packages in the app's data directory. Send the Mac's URL, pin, device token, and Muse SDK token over USB; never compile personal credentials into the image.
 4. **Try one message.** Show the verified device, Wi-Fi, Mac connection, and Muse pairing states. Open the device's agent picker, explain the buttons, and prompt the user to try a message. This step does not claim a voice test passed just because a connection exists.
 
@@ -15,7 +15,7 @@ What this setup exposed:
 - Muse's current SDK uses its phone app for device discovery and account pairing. Developer mode and Bluetooth permission are current prerequisites. Keep the provider's account consent and physical pairing confirmation; explain them at the right time.
 - The first Muse pairing attempt disconnected after device confirmation. A fresh discovery attempt completed setup. Show pairing progress and offer a clear retry that preserves existing Wi-Fi settings.
 - Grok routine runs start fresh. Maestro now supplies recent context from its saved receipts. Keep this behavior out of setup choices.
-- Grok replies can use its existing Mac connection. A public tunnel is unnecessary on this Mac.
+- Grok replies use its existing Mac connection. Remote access lets the StopWatch reach that Mac from other networks; it does not move the bot or coding sessions to a cloud host.
 - Codex's folder-trust prompt needs an explicit choice in project setup. Save that choice for the exact folder and retain normal tool approvals. Pass the path as a TOML table because Codex's command-line dotted-key parser does not handle quoted paths.
 - A connected USB cable does not grant control of an iPhone. iPhone Mirroring needs the user's local authentication. This is a development aid, not part of the product setup flow.
 
@@ -42,3 +42,5 @@ The bridge stopped between development sessions, which made the original device 
 Still required before a broad release: Developer ID signing and notarization, a clean second-Mac test, bundled-license distribution review, fresh Claude/Pi sign-in checks, human speaker-quality and battery tests. Muse's phone app and Grok's routine UI still own their account and consent steps. Do not advertise fully automatic provider setup or arbitrary existing desktop-chat access.
 
 The reply preview is now the only home-screen entry to the reader; it stays visible after playback and gives press feedback over a padded tap target. The recording timer caption no longer repeats the header or collides with the meter. Muse's live transcript remains visible. Grok's picker title is centered without the technical routine subtitle. The latest audit used native listening, thinking, reply-preview, and picker captures, plus the full reader navigation check. Grok's native-resolution renderer covers listening, thinking, speaking, error, sleep, and happy reactions. The character memory/damage test includes pet intensity. Actual finger taps and their physical feel remain an in-hand check.
+
+The remote-access pass keeps the existing Mac layout, controls, and dark theme. It adds the account steps under Wi-Fi without a separate wizard. The audit covered the native app, 390-pixel phone and 820-pixel tablet layouts, scrolling, and the disconnected state. It removed success coloring from unchecked device and Wi-Fi states. There is no second theme, and this pass did not emulate reduced-motion preferences; its existing rule remains in place.

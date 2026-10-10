@@ -1,6 +1,6 @@
 # Voice and portable access
 
-Maestro should work over another Wi-Fi network or a phone hotspot. The current build still reaches the Mac over the local network. The changes below improve the existing voice path; they do not enable remote access.
+Maestro now has guided remote access through Tailscale Funnel. The Mac can remain online at home while the StopWatch uses another Wi-Fi network or a phone hotspot. Tailscale sign-in and its HTTPS/Funnel approval are account steps; Maestro verifies the resulting connection before offering to save it over USB.
 
 ## What we measured
 
@@ -37,9 +37,15 @@ Grok submissions no longer wait for local coding-agent discovery. Request IDs, d
 | [xAI voice API](https://docs.x.ai/developers/model-capabilities/audio/voice) | Direct streaming Grok voice. | This is not evidence of access to the user's existing Grok Bot, its files, memory, or routine. Keep those identities distinct. |
 | [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel) | A stable HTTPS route to an existing Mac service without port forwarding. | The Mac must stay online. Funnel's public endpoint still needs Maestro authentication. A Tailscale account and sign-in are required. |
 
-## Smallest next step
+## Portable access
 
-If the Mac can remain online at home, add guided remote access through a stable tunnel and provision its HTTPS address to the StopWatch. Expose only the authenticated device API. Never expose the unauthenticated localhost setup listener, disable certificate verification, or use a temporary tunnel URL as a saved connection. Keep the tunnel lifecycle in the Mac app and show whether it is connected. Add phone-based Wi-Fi setup so a new network does not require a computer. For Grok, test whether the routine can return directly to that authenticated HTTPS endpoint from its cloud computer; this could remove the Mac tool-execution hop. Verify outbound requests and credential storage before changing the routine.
+The Wi-Fi step detects Tailscale and guides installation, sign-in, account approval, enabling, verification, and disabling. Tailscale owns the persistent tunnel and certificate renewal; Maestro owns the authenticated loopback origin. Closing Maestro's window keeps it running. Quitting stops the origin, and the app's idle-sleep assertion ends. Leave a MacBook powered with its lid open; an idle-sleep assertion cannot override lid sleep or a shutdown.
+
+The remote origin uses `127.0.0.1:4212`; its routes match the device API and require its bearer key. The unauthenticated setup listener on `127.0.0.1:4210` stays private. Before saving the address, Maestro checks anonymous rejection, an authenticated health response, and the absence of setup routes. It does not follow redirects or accept invalid TLS. The device uses ESP-IDF's public CA bundle; existing home connections retain their certificate pin. Only URLs obtained from this Mac's running Tailscale node can be saved. An outage retains the saved address. Enabling never resets another service's Tailscale configuration.
+
+For travel, save a phone hotspot once over USB. [Apple's Maximize Compatibility setting](https://support.apple.com/en-ca/guide/security/secfd166f620/web) selects 2.4 GHz on current iPhones. The device currently remembers one Wi-Fi network. Phone-based Wi-Fi provisioning remains a follow-up so a new network does not need a computer.
+
+For Grok, test whether the routine can return directly to the authenticated HTTPS endpoint from its cloud computer; this could remove the Mac tool-execution hop. Verify outbound requests and credential storage before changing the routine. Remote access alone does not reduce its measured 30-second routine latency.
 
 If the Mac must be off, the agents that currently run there need an always-on host or a supported cloud connection. A cloud voice service alone does not move those sessions, local files, or permissions. Keep Muse's SDK path; use direct cloud voice only where the provider exposes the required agent identity and account access. Start with one provider before adding a relay service or a general plugin system.
 

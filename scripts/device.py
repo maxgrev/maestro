@@ -141,6 +141,8 @@ def main(request):
         if action == "configure":
             if state["maestro"].get("version", 0) < 2:
                 raise ValueError("Install the current Maestro firmware first.")
+            if request["config"].get("trust") == "public" and state["maestro"].get("version", 0) < 3:
+                raise ValueError("Install the current firmware before saving remote access.")
             send(conn, "maestro.setup=" + json.dumps(request["config"], separators=(",", ":")))
             result = response(conn, "@maestro.setup", 5)
             if result.get("ok") is not True:
