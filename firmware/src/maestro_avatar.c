@@ -86,32 +86,42 @@ static void codex(const muse_pose_t *p)
 static float coverage(float v) { return fminf(1, fmaxf(0, v)); }
 static void grok(const muse_pose_t *p)
 {
-    // A circle on a fixed cell grid, with the same expressive state-driven eyes.
+    // Keep the silhouette round; give each work state its own eye gesture.
     const unsigned body = 0x20202b, rim = 0x545268;
     float enter = 1 - expf(-p->mode_t * 5);
     float happy = p->mode == MUSE_MODE_IDLE ? coverage(p->happy) : 0;
     float level = coverage(p->level);
     float cx = 160, cy = 188, radius = 88;
-    float angle = -.42f, look_x = 0, look_y = 0, height = 12;
+    float angle = -.42f, look_x = 0, look_y = 0;
+    float height[2] = {12, 12}, width = 8;
     float blink = fmodf(p->t, 5.2f);
     float open = blink < .24f ? fabsf(blink - .12f) / .12f : 1;
     if (p->mode == MUSE_MODE_LISTENING) {
         angle += enter * .3f;
-        look_x = -12 * enter; look_y = -5 * enter;
-        height += 5 * enter + level * 2;
+        look_x = -20 * enter;
+        look_y = (-4 + 4*sinf(p->mode_t*2)) * enter;
+        height[0] = height[1] = 12 + 9*enter;
+        width += 2*enter;
     } else if (p->mode == MUSE_MODE_THINKING) {
-        look_x = sinf(p->mode_t * 2.4f) * 14 * enter;
-        look_y = -9 * enter;
-        angle += sinf(p->mode_t * 2.4f) * .12f * enter;
-        height -= 5 * enter;
+        // Look up and search side to side, keeping one eye narrowed in thought.
+        float gaze = sinf(p->mode_t * 2);
+        look_x = gaze * 16 * enter;
+        look_y = -8 * enter;
+        angle += .42f * enter;
+        height[0] = gaze > 0 ? 5 : 0;
+        height[1] = gaze > 0 ? 0 : 5;
+        width = 12;
     } else if (p->mode == MUSE_MODE_SPEAKING) {
-        angle += sinf(p->mode_t * 3) * .12f * enter;
-        height += level * 9;
-        cy -= level * 4;
+        // The two arches articulate with playback, even during a long answer.
+        angle += .2f * enter;
+        cy -= level * 8;
+        look_y = level * 4;
     } else if (p->mode == MUSE_MODE_ERROR) {
-        cx += sinf(p->mode_t * 16) * 5 * expf(-p->mode_t * 2);
-        angle += .65f * enter;
-        look_y = 8 * enter; height -= 7 * enter;
+        // A short startled shake settles into unambiguous crossed eyes.
+        cx += sinf(p->mode_t * 20) * 12 * expf(-p->mode_t * 2);
+        angle += .42f * enter;
+        look_x = -12 * enter;
+        look_y = 4 * enter;
     } else if (p->mode == MUSE_MODE_OFF) {
         open = 0; look_y = 8; angle = 0;
     }
@@ -126,23 +136,28 @@ static void grok(const muse_pose_t *p)
     float cs = cosf(angle), sn = sinf(angle);
     for (int eye = 0; eye < 2; eye++) {
         float local_x = eye ? 38 : -1, local_y = -34;
-        float ex = cx + local_x*cs - local_y*sn + look_x;
-        float ey = cy + local_x*sn + local_y*cs + look_y;
+        float ex = roundf((cx + local_x*cs - local_y*sn + look_x)/4)*4;
+        float ey = roundf((cy + local_x*sn + local_y*cs + look_y)/4)*4;
         for (int y = ((int)ey-36)/4*4; y <= (int)ey+36; y += 4) for (int x = ((int)ex-36)/4*4; x <= (int)ex+36; x += 4) {
             float dx = x-ex, dy = y-ey, u = dx*cs+dy*sn, v = -dx*sn+dy*cs;
-            // Pet/completion reaction: two smiling arches; work states always win.
-            float curve = -7 + u*u*.055f;
-            float eye_alpha;
-            if (happy > .2f) {
-                eye_alpha = coverage(3.5f - fabsf(v-curve)) * coverage(15 - fabsf(u));
+            bool lit;
+            if (p->mode == MUSE_MODE_ERROR) {
+                lit = fabsf(u) <= 16 && fabsf(v) <= 16 && fabsf(fabsf(u)-fabsf(v)) <= 4;
+            } else if (p->mode == MUSE_MODE_THINKING) {
+                lit = fabsf(u) <= width && fabsf(v) <= 2 + height[eye]*open;
+            } else if (p->mode == MUSE_MODE_SPEAKING || happy > .2f) {
+                float expression = p->mode == MUSE_MODE_SPEAKING ? level : happy;
+                float curve = -4 - expression*8 + u*u*(.035f + expression*.045f);
+                lit = fabsf(u) <= 16 && fabsf(v-curve) <= 4;
             } else {
                 v /= .12f + .88f*open;
-                float end = fmaxf(fabsf(v)-height, 0);
-                eye_alpha = coverage(7.5f - sqrtf(u*u + end*end));
+                float end = fmaxf(fabsf(v)-height[eye], 0);
+                lit = u*u + end*end <= width*width;
             }
-            if (eye_alpha >= .5f) box(x, y, 4, 4, 0xf2f2ef);
+            if (lit) box(x, y, 4, 4, 0xf2f2ef);
         }
     }
+    if (p->mode == MUSE_MODE_OFF) dim();
 }
 static void pi(const muse_pose_t *p)
 {
@@ -182,7 +197,7 @@ static void dot(const muse_pose_t *p)
     int x = 64, y = 100 + (sinf(p->t*1.5f) > .5f ? 4 : 0);
     float enter = coverage(p->mode_t * 5);
     bool happy = p->mode == MUSE_MODE_IDLE && p->happy > .2f;
-    int raise = p->mode == MUSE_MODE_LISTENING ? -(int)(7*enter) : 0;
+    int raise = p->mode == MUSE_MODE_LISTENING ? -(int)(11*enter) : 0;
     int tilt = p->mode == MUSE_MODE_THINKING ? (sinf(p->mode_t*2) > 0 ? 1 : -1) : 0;
     int beat = (int)(coverage(p->level)*3);
     if (p->mode == MUSE_MODE_SPEAKING) y -= beat*4;
@@ -203,8 +218,8 @@ static void dot(const muse_pose_t *p)
     if (p->mode == MUSE_MODE_LISTENING) {
         // Peek out from under the lifted shades, looking toward the talk button.
         for (int eye=0; eye<2; eye++) {
-            box(x+60+eye*56, y+100, 12, 16, 0x18251c);
-            box(x+60+eye*56, y+100, 4, 4, 0xd9fff2);
+            box(x+52+eye*72, y+84, 12, 16, 0x18251c);
+            box(x+52+eye*72, y+84, 4, 4, 0xd9fff2);
         }
     }
     for (int row = 17; row <= 29; row++) for (int col = 0; col < 48; col++) {
