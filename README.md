@@ -2,13 +2,30 @@
 
 A voice remote for the **M5Stack StopWatch C152**. Choose an agent, hold yellow to talk, then release to send. The Mac app handles local speech, coding sessions, Dot, and Grok Bot requests. Muse uses the official Gadget SDK.
 
+[Project overview](docs/project-overview.md) covers what we built, the stack, and how requests move between the watch, Mac, and agents.
+
+## Current status
+
+- A working private MVP runs on the development StopWatch and Apple Silicon Mac. The Mac must remain online; Tailscale Funnel lets the watch connect from elsewhere.
+- Guided USB installation, Wi-Fi and agent setup, local speech, six agent integrations, and new or existing coding sessions are built. Provider accounts and tool approvals remain with each provider.
+- The watch and Mac share a saved-reply inbox with unread badges, grouped vibration alerts, supported external-session collection, and partial provider read-status sync.
+- The watch has a pixel interface, fixed-size scrolling rows, agent portraits, state animations, and a scrollable Markdown reader. List rendering measured about 31 fps after removing per-row resizing and hidden animation work.
+- Firmware, the Mac app, and its bundled speech tools are packaged locally. See [still pending](#still-pending) for unbuilt features and remaining acceptance checks.
+
+## Stack
+
+- **Firmware:** C/C++, ESP-IDF, FreeRTOS, LVGL, and the official Muse Gadget SDK.
+- **Mac app:** Swift, AppKit, and WebKit with local HTML, CSS, and JavaScript screens.
+- **Bridge and storage:** TypeScript, Node.js, Fastify, and SQLite. Herdr manages coding sessions; provider-specific readers retrieve their final answers. Dot uses MCP, OAuth, and signed events.
+- **Speech and device helpers:** whisper.cpp, Kokoro through ONNX Runtime, Python, and LAME for MP3 output. Markdown uses Marked on the Mac and MD4C on the watch.
+
 ## Use the Mac app
 
 Open `dist/Maestro.app`. It starts the bridge and opens one guided flow:
 
 1. **Device:** connect USB, check the board, and install firmware. Maestro verifies a recovery copy before writing.
 2. **Wi-Fi:** enter a 2.4 GHz network or phone hotspot. Under **Away from home**, install and sign in to Tailscale, then enable remote access. Keep the home connection if you only use Maestro nearby.
-3. **Agents:** pair Muse, connect a Grok Bot routine, or install and sign in to coding agents. Choose a project folder with the Mac folder picker. Codex needs your explicit folder-trust choice; its tool approvals still apply.
+3. **Agents:** pair Muse, connect a Grok Bot routine or your ChatGPT Dot, or install and sign in to coding agents. Dot requires the remote address and its own plugin connection. Choose a project folder with the Mac folder picker. Codex needs your explicit folder-trust choice; its tool approvals still apply.
 4. **Try it:** check the device and Mac connection, open the agent list, and try a short message.
 
 The app stays running when its window closes and prevents idle system sleep while open. Use its menu-bar item to reopen it. Quitting the app stops its bridge; Herdr keeps its conversations. With remote access enabled, the Mac can stay at home. Leave it powered, online, and with its lid open; keep Maestro, Tailscale, and Grok Bot's Mac connection running.
@@ -27,7 +44,9 @@ This package targets **Apple Silicon macOS**. It includes its runtimes and speec
 
 A short vibration confirms a choice. Swipe and hold-blue open the same settings page. Blue moves between controls; yellow selects, toggles, or steps a slider. Hold blue to return. Volume and mute are under Sound. The character identifies the agent; a small title distinguishes coding sessions.
 
-The picker shows each agent's character and follows the round screen. Rows keep a fixed size while scrolling; the physical screen clips the edge previews, and blue brings the focused row into view. Tap the reply text to open the full reply, even after playback ends. Scroll by touch, or press yellow to page up and blue to page down. Hold blue or tap **Back** at the top center to return. Muted replies open the reader automatically. Replies stay in the Mac-backed inbox when you start another message or switch agents. Open **Agents → Inbox** for saved replies, or use **Inbox** in the Mac app. Unread badges show what remains; nearby completions share one vibration after the current voice exchange or reading ends. Background work never opens a page or starts speech. See [inbox behavior and external-agent coverage](docs/inbox.md). Replies over 64,000 bytes show a notice to continue on the Mac.
+The picker shows each agent's character and follows the round screen. Rows keep a fixed size while scrolling; the physical screen clips the edge previews, and blue brings the focused row into view. Subtitles show only known chat titles. Tap the reply text to open the full reply, even after playback ends. Scroll by touch, or press yellow to page up and blue to page down. Hold blue or tap **Back** at the top center to return. Muted replies open the reader automatically. Both readers support Markdown; the watch preserves readable structure without bold or italic font faces. Replies over 64,000 bytes show a notice to continue on the Mac.
+
+Replies stay in the Mac-backed inbox when you start another message or switch agents. Open **Agents → Inbox** for saved replies, or use **Inbox** in the Mac app. Supported external work also appears there. Unread badges show what remains; nearby completions share one vibration after the current voice exchange or reading ends. Background work never opens a page or starts speech. Reading in Maestro on the Mac clears watch badges. Observed Codex desktop reads and follow-ups in Claude or Pi also clear earlier replies where supported; reads inside Muse, Grok Bot, and Dot cannot yet sync. See [inbox behavior and external-agent coverage](docs/inbox.md).
 
 The StopWatch uses bitmap type, pixel controls, flat cards and crisp character portraits. Muse keeps its native animation. Codex uses its original blue companion on a fixed pixel grid. Claude uses the community's MIT-licensed Clawd Tank animations. Dot wears black sunglasses on a mint diamond. Grok keeps its round silhouette and uses distinct eyes and motion for listening, thinking, speaking, errors, sleep, and happy reactions; Pi uses its official three-color mark. They respond to the device's state and share the SDK's display layer and captions. See [character sources and licenses](firmware/src/avatars/SOURCES.md).
 
@@ -39,8 +58,9 @@ The device remembers the selected agent. A missing or busy saved session stays u
 | --- | --- | --- |
 | Dot | Your existing ChatGPT Dot through an OAuth MCP plugin and signed message events. Separate character, spoken replies, and inbox updates. | Requires ChatGPT plugin access, a Dot subscription, and Maestro’s remote address. The Mac must remain online. See [Dot setup](docs/dot.md). |
 | Codex | New and existing Herdr sessions. Full final replies from its read-only app-server API, bound to the exact conversation. | Sending requires Maestro's configured Herdr instance. The inbox also reads final answers from local Codex sessions started elsewhere. A missing or ambiguous answer shows Needs you, with terminal output available. Maestro never resends it. |
-| Claude Code / Pi | Full answers from the exact native conversation: Claude's official session reader and Pi's documented session tree. New and existing Herdr sessions, with provider sign-in or Pi API keys in setup. | Sign-in is required. Claude folder trust stays in Claude. Live account checks remain pending at the user's request; local Claude protocol and Pi branch tests pass. |
-| Muse | Official Muse Gadget SDK and phone pairing. The existing Elo pairing remains intact. | Uses the SDK's current conversation. Arbitrary chat creation and selection are not implemented. Muse spoken replies use Mac speech. |
+| Claude Code | New and existing Herdr sessions, with full answers from Claude's official session reader. Reply timing samples are recorded in the voice notes. | Provider sign-in is required. Folder trust and tool approvals stay in Claude. |
+| Pi | New and existing Herdr sessions, with full answers from Pi's documented active session branch. Provider sign-in or API keys are available in setup. | Live account validation remains pending. Tests cover active branches, incomplete replies, and repeated prompts. |
+| Muse | Official Muse Gadget SDK and phone pairing. The existing Elo pairing remains intact. | Uses the SDK's current conversation. Arbitrary chat creation and selection are not implemented. Agent-supplied audio plays when available; text-only replies use Mac speech. |
 | Grok Bot | An authenticated routine on the user's Bot. Replies return through its existing Mac connection. | Keep Grok Bot's Mac connection online. After two minutes without a reply, Maestro shows a delay and accepts a late callback without resending. History includes the last 12 complete exchanges, capped at 24,000 characters. |
 
 Provider account consent and tool approvals remain with the provider. See [Grok Bot setup](docs/grok-bot.md). The wizard includes a routine instruction tailored to the current Mac, with a copy button.
@@ -49,7 +69,11 @@ Provider account consent and tool approvals remain with the provider. See [Grok 
 
 Choose **Agents → Voice** to preview and save Heart, Bella, Michael, or Emma. Kokoro runs locally on the Mac; no account or speech API key is needed. Samantha, the earlier macOS `say` voice, remains an option. Muse uses agent-supplied audio when available, with Mac speech for text-only replies.
 
-The StopWatch streams 16 kHz PCM; Muse reuses the SDK's MP3 decoder. Speech no longer stops at 1,800 characters. The endpoint accepts up to 16,000 characters and reports errors instead of silently shortening a reply. Voice synthesis uses a bounded stream and stops when the device disconnects. Speech remains one operation at a time. These bundled voice choices speak English.
+For bridge-backed agents, the StopWatch records 16 kHz PCM while yellow is held, then uploads it on release. Local whisper.cpp transcribes the recording; the selected agent receives the final transcript. Maestro saves the agent's final answer and streams Kokoro audio as it is generated. Muse keeps its SDK voice transport and MP3 decoder. Microphone streaming during recording and speaking while the agent is still generating its answer are not implemented.
+
+Speech no longer stops at 1,800 characters. The endpoint accepts up to 16,000 characters and reports errors instead of silently shortening a reply. Voice synthesis uses a bounded stream and stops when the device disconnects. Speech remains one operation at a time. These bundled voice choices speak English.
+
+Kokoro warms while transcription or agent work runs and stays loaded for later replies. Inbox traffic uses a separate worker and reuses its TLS connection; result requests return as soon as the final answer is ready. Reusing a coding conversation avoids startup costs. Grok and Dot still wait for background delivery and a reply callback. See [voice measurements and portable access](docs/voice-and-portability.md) and [UI measurements](docs/pixel-ui.md); individual samples are not latency guarantees.
 
 ## Local data and networking
 
@@ -94,6 +118,15 @@ The older `scripts/flash.py --restore` restores this development StopWatch's ori
 
 The tests cover USB log interleaving, paced certificate transfer, board confirmation, concurrent setup writes, secret-free status, failed-write handling, project trust, callback delivery, request deduplication, restart recovery, Dot OAuth and message isolation, and speech format validation. After a firmware build, the character check runs the C renderers and display damage tracker with address and undefined-behavior sanitizers. It compares animation and agent-switch frames against fresh renders, including clipped display strips. The SDK host suite passed 197 tests, with one optional dependency test skipped.
 
-Live checks have covered Muse pairing and its physical voice path, new and existing Codex sessions, and Grok routine replies. The updated StopWatch recorded a test phrase, received the exact Codex answer, and played Kokoro audio; playback started 8.45 seconds after release in that check. Grok's lost Mac connection recovered after restarting its app; the original receipt accepted its delayed answer and a fresh request completed. The real Claude CLI passed a multipart full-reply and follow-up check against a local test server, without an account. Pi's tests cover active branches, tool output, repeated prompts, and incomplete answers. Claude and Pi account sign-in remain pending at the user's request. A clean second Mac, battery life, and human listening remain acceptance work.
+Live checks have covered Muse pairing and its physical voice path, new and existing Codex sessions, Grok routine replies, and Dot request/reply delivery. The updated StopWatch recorded a test phrase, received the exact Codex answer, and played Kokoro audio; playback started 8.45 seconds after release in that check. Grok's lost Mac connection recovered after restarting its app; the original receipt accepted its delayed answer and a fresh request completed. Claude's multipart reply reader passed against a local test server; later Claude, Codex, Grok, and Dot timing samples are recorded in the [voice notes](docs/voice-and-portability.md). Pi's tests cover active branches, tool output, repeated prompts, and incomplete answers; its live account check remains pending. Public Funnel authentication, route isolation, audio delivery, and the physical watch connection passed from the home network.
 
-[Setup design and limits](docs/setup-ux.md) · [Architecture notes](docs/build-plan.md)
+## Still pending
+
+- **Mac-off operation:** the bridge, local speech, coding sessions, and Grok's return helper still depend on the Mac. No always-on cloud host or replacement provider connection has been built.
+- **Faster voice turns:** streaming microphone upload/transcription, speech before the agent's final answer, full-duplex conversation, and wake-word support are not implemented. Deepgram, Codex realtime, and xAI voice were researched but are not connected voice engines in this build.
+- **Wi-Fi setup from a phone:** the watch stores one network; changing it still requires USB. A phone-hotspot trip remains untested, even though the public Funnel route has passed checks.
+- **Broader inbox sync:** Muse, Grok Bot, and Dot reads cannot clear badges from their own apps. External collection does not cover every remote or cloud conversation; Muse has no durable event catch-up here, and Grok notifications depend on its bot following the saved instruction.
+- **Provider and device acceptance:** finish Pi's live account check, test setup on a clean second Mac, measure battery life, and review speaker quality through human listening.
+- **Public distribution:** obtain Developer ID signing and notarization, review bundled asset and dependency licenses, and address development-mode credential storage before a public release. The current app and repository remain private.
+
+[Project overview](docs/project-overview.md) · [Setup design and limits](docs/setup-ux.md) · [Architecture notes](docs/build-plan.md) · [Inbox coverage](docs/inbox.md)
