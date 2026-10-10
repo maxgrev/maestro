@@ -9,6 +9,7 @@ import { UserError } from './types.js';
 import type { Onboarding } from './onboarding.js';
 import { AgentSetup } from './agent-setup.js';
 import { voices } from './speech.js';
+import { DotServer } from './dot-server.js';
 
 function tokenMatches(header: string | undefined, token: string | undefined) {
   if (!token || !header?.startsWith('Bearer ')) return false;
@@ -17,11 +18,15 @@ function tokenMatches(header: string | undefined, token: string | undefined) {
 }
 export function buildServer(service: Service, options: { local?: boolean; https?: { key: Buffer; cert: Buffer }; onboarding?: Onboarding } = {}) {
   const app = Fastify({ logger: false, bodyLimit: 700_000, ...(options.https ? { https: options.https } : {}) });
+  const dotServer = service.dot ? new DotServer(service.dot) : undefined;
   app.addHook('onRequest', async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header('Content-Security-Policy', "default-src 'self'; connect-src 'self'; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    if (!options.local && dotServer?.publicPath(req.url.split('?')[0]!)) {
+      await dotServer.authorize(req, reply); return;
+    }
     const callback = ['/api/grok/reply', '/api/grok/inbox'].includes(req.url.split('?')[0] ?? '');
     if (callback) {
       if (!tokenMatches(req.headers.authorization, service.config.grok?.replyKey)) throw new UserError('Unauthorized.', 401);
@@ -40,6 +45,7 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     void reply.status(status).send({ error: message });
   });
   app.addContentTypeParser('audio/pcm', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
+  if (!options.local) dotServer?.register(app);
   app.get('/api/health', async () => ({ name: 'Maestro', version: '0.2.0', speech: 'local', muse: 'Pair on the device using the Muse app' }));
   app.get('/api/targets', () => service.targets());
   app.get('/api/inbox/status', () => ({ ...service.store.inbox.status(), warnings: [...service.observer?.warnings ?? []] }));
@@ -110,6 +116,19 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     return reply.type(b.format === 'pcm' ? 'audio/pcm' : 'audio/mpeg').send(audio);
   });
   if (options.local) {
+    if (service.dot) {
+      const dot = service.dot;
+      app.get('/api/setup/dot', () => dot.state());
+      app.post('/api/setup/dot', req => dot.configure(req.body));
+      app.get('/api/setup/dot/authorization', req => {
+        const { ticket } = z.object({ ticket: z.string().min(40).max(100) }).parse(req.query);
+        dot.auth.pending(ticket); return { name: dot.state().name };
+      });
+      app.post('/api/setup/dot/authorize', req => {
+        const { ticket } = z.object({ ticket: z.string().min(40).max(100) }).strict().parse(req.body);
+        return { redirect: dot.auth.approve(ticket) };
+      });
+    }
     if (options.onboarding) {
       const setup = options.onboarding;
       app.get('/api/setup', () => setup.state());

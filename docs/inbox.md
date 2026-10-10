@@ -8,6 +8,7 @@ Nearby completions share a 160 ms vibration. The watch waits at least two second
 
 ## Work started elsewhere
 
+- **Dot:** ask your connected Dot to send a result or question to Maestro. Its scoped `notify_maestro` tool adds one receipt per update ID without changing the active conversation. This is a requested Dot action, not a scan of all ChatGPT history.
 - **Codex:** final answers from local desktop, CLI, editor, and batch sessions. Maestro reads the official app-server API. It never resumes the session or grants tool approval. Child-agent turns are excluded to avoid duplicate reports from the same task.
 - **Claude Code:** final text from local sessions through the official session reader. Tool narration and thinking blocks are excluded.
 - **Pi:** completed replies on the current branch of its local v3 session files. Abandoned branches and incomplete writes are excluded.

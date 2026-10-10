@@ -1,12 +1,12 @@
 // Render once from the same artwork as the animated face. Transparent corners
 // let the selected row show through; no separate art files to keep in sync.
 #define THUMB 56
-static lv_image_dsc_t s_portraits[5];
+static lv_image_dsc_t s_portraits[6];
 static void portraits_build(void)
 {
     uint16_t *source = heap_caps_calloc(320 * 320, sizeof(*source), MUSE_BIG_CAPS);
     configASSERT(source);
-    for (int who = 0; who < 5; who++) {
+    for (int who = 0; who < 6; who++) {
         maestro_avatar_snapshot(who, source);
         int left = 320, right = 0, top = 320, bottom = 0;
         for (int y = 0; y < 320; y++) for (int x = 0; x < 320; x++) if (source[y * 320 + x]) {

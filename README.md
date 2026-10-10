@@ -1,6 +1,6 @@
 # Maestro
 
-A voice remote for the **M5Stack StopWatch C152**. Choose an agent, hold yellow to talk, then release to send. The Mac app handles local speech, coding sessions, and Grok Bot requests. Muse uses the official Gadget SDK.
+A voice remote for the **M5Stack StopWatch C152**. Choose an agent, hold yellow to talk, then release to send. The Mac app handles local speech, coding sessions, Dot, and Grok Bot requests. Muse uses the official Gadget SDK.
 
 ## Use the Mac app
 
@@ -37,6 +37,7 @@ The device remembers the selected agent. A missing or busy saved session stays u
 
 | Agent | Supported connection | Limits |
 | --- | --- | --- |
+| Dot | Your existing ChatGPT Dot through an OAuth MCP plugin and signed message events. Separate character, spoken replies, and inbox updates. | Requires ChatGPT plugin access, a Dot subscription, and Maestro’s remote address. The Mac must remain online. See [Dot setup](docs/dot.md). |
 | Codex | New and existing Herdr sessions. Full final replies from its read-only app-server API, bound to the exact conversation. | Sending requires Maestro's configured Herdr instance. The inbox also reads final answers from local Codex sessions started elsewhere. A missing or ambiguous answer shows Needs you, with terminal output available. Maestro never resends it. |
 | Claude Code / Pi | Full answers from the exact native conversation: Claude's official session reader and Pi's documented session tree. New and existing Herdr sessions, with provider sign-in or Pi API keys in setup. | Sign-in is required. Claude folder trust stays in Claude. Live account checks remain pending at the user's request; local Claude protocol and Pi branch tests pass. |
 | Muse | Official Muse Gadget SDK and phone pairing. The existing Elo pairing remains intact. | Uses the SDK's current conversation. Arbitrary chat creation and selection are not implemented. Muse spoken replies use Mac speech. |
@@ -54,7 +55,7 @@ The StopWatch streams 16 kHz PCM; Muse reuses the SDK's MP3 decoder. Speech no l
 
 A downloaded app uses `~/Library/Application Support/Maestro`. A development app built under this checkout reuses its existing `.local` directory. The app remembers that location. Data includes SQLite request and inbox history, private configuration, certificate, recovery copies, and tool installs. `MAESTRO_DATA` selects another directory for command-line development.
 
-The local page uses loopback HTTP port 4210. Home connections use authenticated HTTPS port 4211 with a pinned certificate. Remote access uses Tailscale Funnel's stable HTTPS address, forwarded to an authenticated device-only origin on loopback port 4212. The setup page and its routes are absent from that origin. Never tunnel port 4210.
+The local page uses loopback HTTP port 4210. Home connections use authenticated HTTPS port 4211 with a pinned certificate. Remote access uses Tailscale Funnel's stable HTTPS address, forwarded to the authenticated device API on loopback port 4212. When Dot is enabled, that origin also serves its scoped MCP and OAuth endpoints. The setup page and its routes are absent from that origin. Never tunnel port 4210.
 
 Setup verifies public authentication and route isolation before saving a remote address. It refuses to replace another Tailscale service. **Save to StopWatch** sends the address, device key, and Muse SDK token over USB. Remote firmware uses ESP-IDF's certificate bundle with hostname validation; home firmware keeps its certificate pin. The generic image contains no personal credentials. Turning remote access off removes only Maestro's matching share; save again over USB to restore the home address.
 
@@ -87,11 +88,11 @@ npm run firmware:build
 
 ## Recovery and validation
 
-The guided installer stores each board's 16 MB recovery image and checksum under `backups/<chip-mac>/`. It verifies the firmware manifest, board confirmation, chip identity, flash size, and backup before writing. A failed or uncertain request never retries itself. Reconnect USB and explicitly retry installation if needed.
+The guided installer stores each board's 16 MB recovery image and checksum under `backups/<chip-mac>/`. It verifies the firmware manifest, board confirmation, chip identity, flash size, and backup before writing. Agent tasks are not automatically repeated; Dot transport retries retain their original event ID. Reconnect USB and explicitly retry installation if needed.
 
 The older `scripts/flash.py --restore` restores this development StopWatch's original factory image from `.local/backups/stopwatch-original.bin`. Use it only with the original board. Close other serial tools first.
 
-The tests cover USB log interleaving, paced certificate transfer, board confirmation, concurrent setup writes, secret-free status, failed-write handling, project trust, callback delivery, request deduplication, restart recovery, and speech format validation. After a firmware build, the character check runs the C renderers and display damage tracker with address and undefined-behavior sanitizers. It compares 2,405 animation and agent-switch frames against fresh renders, including clipped display strips. The SDK host suite passed 197 tests, with one optional dependency test skipped.
+The tests cover USB log interleaving, paced certificate transfer, board confirmation, concurrent setup writes, secret-free status, failed-write handling, project trust, callback delivery, request deduplication, restart recovery, Dot OAuth and message isolation, and speech format validation. After a firmware build, the character check runs the C renderers and display damage tracker with address and undefined-behavior sanitizers. It compares animation and agent-switch frames against fresh renders, including clipped display strips. The SDK host suite passed 197 tests, with one optional dependency test skipped.
 
 Live checks have covered Muse pairing and its physical voice path, new and existing Codex sessions, and Grok routine replies. The updated StopWatch recorded a test phrase, received the exact Codex answer, and played Kokoro audio; playback started 8.45 seconds after release in that check. Grok's lost Mac connection recovered after restarting its app; the original receipt accepted its delayed answer and a fresh request completed. The real Claude CLI passed a multipart full-reply and follow-up check against a local test server, without an account. Pi's tests cover active branches, tool output, repeated prompts, and incomplete answers. Claude and Pi account sign-in remain pending at the user's request. A clean second Mac, battery life, and human listening remain acceptance work.
 

@@ -8,6 +8,8 @@ import { Service } from './service.js';
 import { buildServer } from './server.js';
 import { Onboarding } from './onboarding.js';
 import { Observer } from './observe.js';
+import { Dot } from './dot.js';
+import { RemoteAccess } from './remote.js';
 
 mkdirSync(localDir, { recursive: true, mode: 0o700 });
 chmodSync(localDir, 0o700);
@@ -18,6 +20,8 @@ if (new Set([config.port, config.localPort, config.remotePort]).size !== 3) thro
 const store = new Store(resolve(localDir, 'maestro.sqlite'));
 const speech = new Speech(config.speech);
 const service = new Service(config, store, new Herdr(config), speech);
+const remoteAccess = new RemoteAccess(config);
+service.dot = new Dot(store, () => remoteAccess.saved()?.url, config.localPort);
 const local = buildServer(service, { local: true, onboarding: new Onboarding(config) });
 const device = buildServer(service, { https: { key: readFileSync(resolve(localDir, 'bridge-key.pem')), cert: readFileSync(resolve(localDir, 'bridge-cert.pem')) } });
 // Funnel terminates public TLS. This origin keeps device authentication and has
@@ -29,6 +33,7 @@ try {
   await remote.listen({ host: '127.0.0.1', port: config.remotePort });
 } catch (error) { await Promise.all([local.close(), device.close(), remote.close()]); store.close(); throw error; }
 store.recover();
+service.dot.start();
 const observer = new Observer(config, store.inbox, service.herdr);
 service.observer = observer;
 observer.start();
@@ -40,6 +45,7 @@ async function stop() {
   stopping = true;
   await Promise.all([local.close(), device.close(), remote.close()]);
   await service.drain();
+  await service.dot?.stop();
   await observer.stop();
   speech.close();
   store.close();

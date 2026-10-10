@@ -147,6 +147,24 @@ static void pi(const muse_pose_t *p)
     int lift=p->mode==MUSE_MODE_SPEAKING?(int)(p->level*5):p->mode==MUSE_MODE_THINKING?(int)(sinf(p->t*5)*3):0;
     box(x+s*3,y+s*2-lift,s,s*2,0xf1be58);
 }
+static void dot(const muse_pose_t *p)
+{
+    // The owner's Dot is the pale ring. Draw at panel resolution, with a soft
+    // edge and a moving center; keep its silhouette distinct from Grok's face.
+    float level = coverage(p->level), cx = 160, cy = 185 + sinf(p->t * 1.5f) * 2;
+    float radius = 82 + sinf(p->t * 1.5f), hole = 30, dx = 0, dy = 0;
+    if (p->mode == MUSE_MODE_LISTENING) { hole += 4 + level * 5; dy = -6; }
+    if (p->mode == MUSE_MODE_THINKING) { dx = sinf(p->mode_t * 2) * 9; dy = cosf(p->mode_t * 2) * 9; }
+    if (p->mode == MUSE_MODE_SPEAKING) { radius += level * 5; hole += level * 9; }
+    if (p->mode == MUSE_MODE_ERROR) { dx = sinf(p->mode_t * 12) * 5 * expf(-p->mode_t); hole = 21; }
+    if (p->mode == MUSE_MODE_OFF) hole = 12;
+    const unsigned body = p->mode == MUSE_MODE_OFF ? 0x777d91 : 0xbdc4db;
+    for (int y = 90; y < 280; y++) for (int x = 65; x < 255; x++) {
+        float ox = x - cx, oy = y - cy, ix = ox - dx, iy = oy - dy;
+        float alpha = coverage(radius - sqrtf(ox*ox + oy*oy) + .5f) * coverage(sqrtf(ix*ix + iy*iy) - hole + .5f);
+        if (alpha > 0) pixels[y * SIDE + x] = color(mix(0, body, alpha));
+    }
+}
 bool maestro_avatar_render(const muse_pose_t *p)
 {
     int who = preview_character < 0 ? maestro_character() : preview_character;
@@ -159,6 +177,7 @@ bool maestro_avatar_render(const muse_pose_t *p)
     if (who == 1) grok(p);
     else if (who == 2) codex(p);
     else if (who == 3) clawd(p);
+    else if (who == 5) dot(p);
     else pi(p);
     return true;
 }

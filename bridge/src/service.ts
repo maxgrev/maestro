@@ -4,9 +4,11 @@ import type { Herdr } from './herdr.js';
 import type { SpeechEngine } from './speech.js';
 import { Store } from './store.js';
 import { UserError, type Target } from './types.js';
+import type { Dot } from './dot.js';
 
 export const requestId = z.string().uuid();
 export class Service {
+  dot?: Dot;
   observer?: { warnings: Set<string> };
   private tasks = new Set<Promise<void>>();
   private accepting = true;
@@ -15,10 +17,12 @@ export class Service {
     return this.config.grok ? { id: 'grok', name: this.config.grok.name, provider: 'grok', detail: '', status: 'ready', available: true, character: 'grok' } : undefined;
   }
   async targets(): Promise<{ targets: Target[]; warnings: string[] }> {
-    this.store.expireGrok();
+    this.store.expireCallbacks();
     const targets: Target[] = [], warnings: string[] = [];
     try { targets.push(...await this.herdr.targets()); } catch { warnings.push('Herdr is offline. Start the configured Herdr session.'); }
     const grok = this.grokTarget();
+    const dot = this.dot?.target();
+    if (dot) targets.unshift(dot);
     if (grok) targets.unshift(grok);
     else warnings.push('Grok Bot needs a webhook and reply helper.');
     for (const target of this.store.inbox.targets()) if (target.id !== 'muse' && !targets.some(t => t.id === target.id)) {
@@ -37,8 +41,8 @@ export class Service {
     } else if (body.length % 2 || body.length < 9600 || body.length > 640000) {
       throw new UserError('Record between 0.3 and 20 seconds of 16 kHz mono PCM16 audio.');
     }
-    // A Grok request does not depend on local coding-session discovery.
-    const targets = targetId === 'grok' ? [this.grokTarget()] : (await this.targets()).targets;
+    // Companion requests do not depend on local coding-session discovery.
+    const targets = targetId === 'grok' ? [this.grokTarget()] : targetId === 'dot' ? [this.dot?.target()] : (await this.targets()).targets;
     // Discovery awaited: another request may have reserved this ID in the meantime.
     const duplicate = this.store.existing(id, fingerprint);
     if (duplicate) return duplicate;
@@ -67,6 +71,9 @@ export class Service {
         turn = this.store.update(id, { target, state: 'working' });
         const result = await this.herdr.prompt(target, turn.text);
         this.store.update(id, result);
+      } else if (turn.target.provider === 'dot') {
+        if (!this.dot) throw new UserError('Dot is not configured.');
+        this.dot.send(id);
       } else {
         const grok = this.config.grok;
         if (!grok) throw new UserError('Grok Bot is not configured.');

@@ -47,7 +47,7 @@ static void lv_obj_invalidate(void *object)
 
 int main(void)
 {
-    for (int who = 0; who < 5; who++) {
+    for (int who = 0; who < 6; who++) {
         character = 3;
         maestro_avatar_snapshot(who, fresh);
         assert(character == 3); // Picker previews must not change the recipient.
@@ -57,7 +57,7 @@ int main(void)
     }
     muse_pixel_set_size(SIZE);
     memset(display, 0xff, sizeof(display));
-    const int sequence[] = {0, 1, 0, 2, 0, 3, 0, 4, 0};
+    const int sequence[] = {0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0};
     int rendered = 0;
     for (unsigned c = 0; c < sizeof(sequence) / sizeof(sequence[0]); c++) {
         character = sequence[c];

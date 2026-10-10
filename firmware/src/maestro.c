@@ -191,7 +191,7 @@ static void refresh_targets(void)
         text_copy(target->detail, field(item, "detail"), sizeof(target->detail));
         text_copy(target->status, field(item, "status"), sizeof(target->status));
         const char *character = field(item, "character");
-        target->character = !strcmp(character, "grok") ? 1 : !strcmp(character, "codex") ? 2 : !strcmp(character, "claude") ? 3 : 4;
+        target->character = !strcmp(character, "grok") ? 1 : !strcmp(character, "codex") ? 2 : !strcmp(character, "claude") ? 3 : !strcmp(character, "dot") ? 5 : 4;
         target->available = cJSON_IsTrue(cJSON_GetObjectItem(item, "available"));
     }
     if (strcmp(s_selected.id, "muse")) {
@@ -344,7 +344,7 @@ void maestro_init(void)
             const char *id = field(json, "id"), *name = field(json, "name");
             cJSON *who = cJSON_GetObjectItemCaseSensitive(json, "character");
             if (id[0] && strlen(id) < sizeof(s_selected.id) && name[0] && cJSON_IsNumber(who)
-                && who->valueint >= 0 && who->valueint <= 4) {
+                && who->valueint >= 0 && who->valueint <= 5) {
                 strlcpy(s_selected.id, id, sizeof(s_selected.id));
                 text_copy(s_selected.name, name, sizeof(s_selected.name));
                 s_selected.character = who->valueint;

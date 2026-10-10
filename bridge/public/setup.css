@@ -31,3 +31,4 @@
 @keyframes codex-idle{from{background-position:0 0}to{background-position:-400px 0}}
 @keyframes grok-breathe{0%,100%{translate:0 0}50%{translate:0 -3px}}
 @media(prefers-reduced-motion:reduce){.companion{animation:none!important}.companion.claude{background-image:url('/characters/claude.png')}}
+.companion.dot{width:80px;height:80px;background:#bdc4db;border:0;border-radius:50%;display:block;image-rendering:auto}.companion.dot:before,.companion.dot i,.companion.dot b{display:none}.companion.dot:after{content:'';position:absolute;width:30px;height:30px;left:25px;top:25px;border-radius:50%;background:#101413}.watch-face .companion.dot:after{background:#030604}.watch-face .companion.dot{animation:grok-breathe 4s ease-in-out infinite}

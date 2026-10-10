@@ -2,7 +2,7 @@ export type State = 'queued' | 'transcribing' | 'dispatching' | 'working' | 'don
 export interface Target {
   id: string;
   name: string;
-  provider: 'herdr' | 'grok';
+  provider: 'herdr' | 'grok' | 'dot';
   detail: string;
   status: string;
   available: boolean;
@@ -10,7 +10,7 @@ export interface Target {
   identity?: string;
   kind?: string;
   project?: string;
-  character?: 'grok' | 'codex' | 'claude' | 'pi';
+  character?: 'grok' | 'codex' | 'claude' | 'pi' | 'dot';
 }
 export interface Turn {
   id: string;

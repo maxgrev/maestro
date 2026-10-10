@@ -34,18 +34,22 @@ export class Store {
         ? 'Bridge restarted. Check the agent before sending again.' : 'Bridge restarted before submission. Record a new request.' });
     }
   }
-  expireGrok(now = Date.now()) {
+  expireCallbacks(now = Date.now()) {
     const rows = this.db.prepare(`SELECT * FROM turns WHERE state='working'
       AND json_extract(target, '$.provider')='grok' AND updated<=?`).all(now - 120_000) as Row[];
     for (const row of rows) this.write(decode(row), { state: 'uncertain',
       error: 'Grok received this request, but its reply is delayed. Keep Grok Bot open on your Mac and check its computer connection. A late reply will appear here; do not resend the task.' });
+    const dots = this.db.prepare(`SELECT * FROM turns WHERE state='working'
+      AND json_extract(target, '$.provider')='dot' AND updated<=?`).all(now - 600_000) as Row[];
+    for (const row of dots) this.write(decode(row), { state: 'uncertain',
+      error: 'Dot has not replied yet. Check your Dot before sending again. A late reply will still appear here.' });
   }
   get(id: string): Turn | undefined {
-    this.expireGrok();
+    this.expireCallbacks();
     const row = this.db.prepare('SELECT * FROM turns WHERE id=?').get(id) as Row | undefined;
     return row && decode(row);
   }
-  list(): Turn[] { this.expireGrok(); return (this.db.prepare('SELECT * FROM turns ORDER BY created DESC LIMIT 50').all() as Row[]).map(decode); }
+  list(): Turn[] { this.expireCallbacks(); return (this.db.prepare('SELECT * FROM turns ORDER BY created DESC LIMIT 50').all() as Row[]).map(decode); }
   conversationHistory(targetId: string) {
     // Query this conversation directly; activity in other agents must not erase its context.
     const rows = this.db.prepare(`SELECT id, text, reply, state FROM turns
@@ -71,7 +75,7 @@ export class Store {
     return decode(row);
   }
   create(id: string, fingerprint: string, target: Target, text: string): Turn {
-    this.expireGrok();
+    this.expireCallbacks();
     // No await between checking and insertion: one bridge process owns this database.
     if (this.db.prepare("SELECT 1 FROM turns WHERE json_extract(target, '$.id')=? AND state IN ('queued','transcribing','dispatching','working') LIMIT 1").get(target.id)) {
       throw new UserError('This conversation already has a request in progress.', 409);

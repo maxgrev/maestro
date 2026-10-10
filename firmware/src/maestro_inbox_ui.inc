@@ -61,7 +61,7 @@ static void inbox_ui_tick(void)
                 text_copy(row->name, field(target, "name"), sizeof(row->name));
                 text_copy(row->detail, field(item, "reply"), sizeof(row->detail));
                 const char *who = field(target, "character");
-                row->character = !strcmp(who, "muse") ? 0 : !strcmp(who, "grok") ? 1 : !strcmp(who, "codex") ? 2 : !strcmp(who, "claude") ? 3 : 4;
+                row->character = !strcmp(who, "muse") ? 0 : !strcmp(who, "grok") ? 1 : !strcmp(who, "codex") ? 2 : !strcmp(who, "claude") ? 3 : !strcmp(who, "dot") ? 5 : 4;
                 strlcpy(row->status, cJSON_IsTrue(cJSON_GetObjectItem(item, "read")) ? "" : cJSON_IsTrue(cJSON_GetObjectItem(item, "attention")) ? "!" : "1", sizeof(row->status));
             }
             cJSON *next = cJSON_GetObjectItem(json, "next");
