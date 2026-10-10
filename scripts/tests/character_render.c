@@ -54,6 +54,12 @@ int main(void)
         int painted = 0;
         for (int i = 0; i < SIZE * SIZE; i++) painted += fresh[i] != 0;
         assert(painted > 1000);
+        if (who == 0) {
+            // Native Muse cells must be solid in portraits; sampling the
+            // enlarged grid used to bake alternating dim edges into them.
+            for (int y = 0; y < SIZE; y++) for (int x = 0; x < SIZE; x++)
+                assert(fresh[y*SIZE+x] == fresh[(y/5*5)*SIZE+x/5*5]);
+        }
     }
     muse_pixel_set_size(SIZE);
     memset(display, 0xff, sizeof(display));

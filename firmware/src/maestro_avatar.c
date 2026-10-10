@@ -179,29 +179,60 @@ static void pi(const muse_pose_t *p)
 }
 static void dot(const muse_pose_t *p)
 {
-    int x = 64, y = 92 + (sinf(p->t*1.5f) > .5f ? 4 : 0);
-    if (p->mode == MUSE_MODE_LISTENING) y -= 4;
-    if (p->mode == MUSE_MODE_SPEAKING) y -= (int)(coverage(p->level)*2)*4;
+    int x = 64, y = 100 + (sinf(p->t*1.5f) > .5f ? 4 : 0);
+    float enter = coverage(p->mode_t * 5);
+    bool happy = p->mode == MUSE_MODE_IDLE && p->happy > .2f;
+    int raise = p->mode == MUSE_MODE_LISTENING ? -(int)(7*enter) : 0;
+    int tilt = p->mode == MUSE_MODE_THINKING ? (sinf(p->mode_t*2) > 0 ? 1 : -1) : 0;
+    int beat = (int)(coverage(p->level)*3);
+    if (p->mode == MUSE_MODE_SPEAKING) y -= beat*4;
     if (p->mode == MUSE_MODE_ERROR) x += (int)(sinf(p->mode_t*12)*2*expf(-p->mode_t*2))*4;
-    if (p->mode == MUSE_MODE_OFF) y += 4;
+    if (p->mode == MUSE_MODE_OFF) { y += 4; raise = 3; }
+    if (happy) y -= (int)(fabsf(sinf(p->t*7))*3)*4;
+    // Separate the existing glasses from the body so the pose changes, not
+    // just a tiny decoration. Keep the source sprite and its silhouette.
     for (int row = 0; row < 48; row++) for (int col = 0; col < 48; col++) {
         uint16_t c = dot_sprite[row*48+col];
         if (!c) continue;
-        if (p->mode == MUSE_MODE_OFF) c = (c & 0xf7de) >> 1;
+        bool glass = c == 0x18c3 || (c == 0x19c7 && row >= 18 && row <= 25 && col >= 7 && col <= 40);
+        // Merge the near-identical mint shades into solid pixel clusters.
+        if (glass || c == 0x3f16) c = 0x3ef6;
         for (int dy = 0; dy < 4; dy++) for (int dx = 0; dx < 4; dx++)
             pixels[(y+row*4+dy)*SIDE+x+col*4+dx] = c;
     }
-    if (p->mode == MUSE_MODE_THINKING) {
-        int step = (int)(p->mode_t*4) % 3;
-        for (int i = 0; i < 3; i++) box(144+i*12, 292, 8, 4, i == step ? 0x93ffe1 : 0x235f54);
-    } else if (p->mode == MUSE_MODE_OFF) sleep_glint(p->mode_t);
-    else if (p->mode == MUSE_MODE_ERROR) {
-        box(x+116,y+64,12,4,0xf1be58); box(x+124,y+68,4,12,0xf1be58);
-    } else if (p->mode == MUSE_MODE_LISTENING || (p->mode == MUSE_MODE_IDLE && p->happy > .2f)) {
-        // One small glint answers a tap or a listening transition.
-        if ((int)(p->mode_t*4) % 4 < 2) {
-            box(x+60, y+80, 12, 4, 0xc6ffee); box(x+64, y+76, 4, 12, 0xc6ffee);
+    if (p->mode == MUSE_MODE_LISTENING) {
+        // Peek out from under the lifted shades, looking toward the talk button.
+        for (int eye=0; eye<2; eye++) {
+            box(x+60+eye*56, y+100, 12, 16, 0x18251c);
+            box(x+60+eye*56, y+100, 4, 4, 0xd9fff2);
         }
+    }
+    for (int row = 17; row <= 29; row++) for (int col = 0; col < 48; col++) {
+        uint16_t c = dot_sprite[row*48+col];
+        if (c != 0x18c3 && !(c == 0x19c7 && row >= 18 && row <= 25 && col >= 7 && col <= 40)) continue;
+        int gy = row + raise + tilt*(col-24)/8;
+        unsigned shade = c == 0x18c3 ? 0x18251c : 0x346f62;
+        box(x+col*4, y+gy*4, 4, 4, shade);
+    }
+    if (p->mode == MUSE_MODE_SPEAKING) {
+        // An actual speaking pose: the mouth opens with playback amplitude.
+        box(x+84, y+132, 24, 4+beat*4, 0x18251c);
+        if (beat > 1) box(x+92, y+136+beat*4, 8, 4, 0x93ffe1);
+    } else if (p->mode == MUSE_MODE_THINKING) {
+        for (int i=0; i<3; i++) {
+            int lift = (int)(p->mode_t*4)%3 == i ? 4 : 0;
+            box(232+i*12, 120-lift, 8, 8, 0x93ffe1);
+        }
+    } else if (p->mode == MUSE_MODE_ERROR) {
+        // Two amber crosses remain legible after the short startled shake.
+        for (int eye=0; eye<2; eye++) for (int i=0; i<5; i++) {
+            box(x+48+eye*72+i*4, y+80+i*4, 4, 4, 0xf1be58);
+            box(x+64+eye*72-i*4, y+80+i*4, 4, 4, 0xf1be58);
+        }
+    } else if (p->mode == MUSE_MODE_OFF) { dim(); sleep_glint(p->mode_t); }
+    else if (happy) {
+        box(x+80,y+132,4,8,0x18251c); box(x+108,y+132,4,8,0x18251c);
+        box(x+84,y+140,24,4,0x18251c);
     }
 }
 bool maestro_avatar_render(const muse_pose_t *p)
@@ -225,8 +256,18 @@ void maestro_avatar_snapshot(int character, uint16_t *dst)
     const muse_pose_t pose = {.mode = MUSE_MODE_IDLE, .t = 1, .mode_t = 1};
     preview_character = character;
     muse_pixel_render(&pose);
+    if (character == 0) {
+        // Sample Muse's native cells before the SDK adds its enlarged grid
+        // shading. Shrinking that screen texture caused a checkerboard alias.
+        muse_pixel_set_size(MUSE_PX_W);
+        muse_pixel_scale(dst, SIDE, 0, MUSE_PX_W - 1, 0, MUSE_PX_H - 1);
+        for (int y = SIDE - 1; y >= 0; y--) for (int x = SIDE - 1; x >= 0; x--)
+            dst[y*SIDE+x] = dst[(y*MUSE_PX_H/SIDE)*SIDE+x*MUSE_PX_W/SIDE];
+    } else {
+        muse_pixel_set_size(SIDE);
+        muse_pixel_scale(dst, SIDE, 0, SIDE - 1, 0, SIDE - 1);
+    }
     muse_pixel_set_size(SIDE);
-    muse_pixel_scale(dst, SIDE, 0, SIDE - 1, 0, SIDE - 1);
     preview_character = -1;
 }
 bool maestro_avatar_scale(uint16_t *dst, int stride, int x0, int x1, int y0, int y1, int size)

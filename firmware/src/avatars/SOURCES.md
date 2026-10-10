@@ -9,7 +9,7 @@
 
 Frame mapping: Codex idle (row 0), speaking/wave (3), thinking/run (7), error (5), listening/wait (6). Clawd uses idle, alert, thinking, happy, confused, and sleeping. The SDK's state selects the animation.
 
-Added characters render on a 320×320 canvas. Codex's original poses are sampled on a fixed 48×52 grid; Clawd uses its original pixels at constant 2× scale. Grok, Pi and Dot use 4px cells, without blended edges. Picker portraits use the same artwork with nearest-neighbor sampling. The native Muse animation stays intact. Hidden characters stop drawing while a list or reply reader covers them.
+Added characters render on a 320×320 canvas. Codex's original poses are sampled on a fixed 48×52 grid; Clawd uses its original pixels at constant 2× scale. Grok, Pi and Dot use 4px cells, without blended edges. Dot's renderer separates its existing glasses into a moving layer, merges two mint shades, and adds eyes and a mouth for reactions. Picker portraits use the same artwork with nearest-neighbor sampling; Muse's portrait starts from its unshaded native cells. The native Muse animation stays intact. Hidden characters stop drawing while a list or reply reader covers them.
 
 Dot generation mode: reference-image edit, transparent background. Exact prompt:
 

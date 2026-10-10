@@ -90,6 +90,19 @@ edit(ui, 'lv_obj_set_flag(lbl, LV_OBJ_FLAG_HIDDEN, !caption[0]);',
      'lv_obj_set_flag(lbl, LV_OBJ_FLAG_HIDDEN, !caption[0] || (mode == MUSE_MODE_LISTENING && (!strncmp(caption, "LISTENING", 9) || !strncmp(caption, "RECORDING", 9))));')
 # Reading uses Maestro's scrollable full reply; keep home geometry stable on mute.
 edit(ui, 'int layout = muse_settings_speaker_on() ? ANSWER_HEARD : ANSWER_READ;', 'int layout = ANSWER_HEARD;')
+# Muse fills the native canvas much higher than the added characters. Fit its
+# whole frame below the header; leave its artwork and pose renderer unchanged.
+edit(ui, 'static void move_muse(int px, int y)\n{', '''static void move_muse(int px, int y)
+{
+    if (!s_small && maestro_character() == 0) {
+        bool reply = px < s_canvas_px;
+        px = MUSE_PX_W * (reply ? 3 : 4);
+        y = reply ? -8 : 8;
+    }''')
+edit(ui, '    if (answer != s_answer) {', '''    static int shown_character = -1;
+    int character = maestro_character();
+    if (answer != s_answer || character != shown_character) {
+        shown_character = character;''')
 edit(ui, '    set_mic_color(COLOR_DIM);', '    set_mic_color(0xe8cb65);')
 edit(ui, 'set_mic_color(mode == MUSE_MODE_LISTENING ? accent : COLOR_DIM);',
      'set_mic_color(mode == MUSE_MODE_LISTENING ? accent : 0xe8cb65);')

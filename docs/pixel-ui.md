@@ -14,6 +14,10 @@ All portraits come from their full-screen character. Muse and Clawd retain their
 
 Pi's mark now has pixel eyes and a yellow hand: it looks toward speech, scans while thinking, bounces with speech level, reacts to an error, and sleeps. Codex gains a dim sleep pose and rising pixel Z. Clawd uses its existing happy animation on a pet reaction. Grok's silhouette moves only in whole cells to avoid a shimmering rim. Dot's error shake settles, and its glasses glint and sleep state remain on the same pixel grid. Muse's art and animation code are unchanged.
 
+Muse's picker portrait samples its original 64×64 cells before the SDK adds enlarged pixel-edge shading. Shrinking that shaded screen image caused the old checker pattern. On the home screen, Muse uses a 256px canvas centered 8px below screen center, and a 192px canvas while answering. Both leave the header clear; its native poses and palette stay intact.
+
+Dot separates the source sprite's sunglasses from its body. It raises them and reveals its eyes when listening, tilts them while thinking, moves its mouth with speech level, shows amber crosses on error, and drops the glasses when sleeping. A pet reaction adds a hop and smile. Near-identical mint shades merge into solid clusters to reduce noise.
+
 Agent rows separate the provider name from the chat title. The subtitle contains only a known chat title; new chats and companions without titles leave it blank. Connection instructions and project paths no longer take its place.
 
 The native renderer still owns animation, captions, audio levels and touch. Maestro pauses covered drawing while the picker or reader is open. Closing an overlay resumes the current state. Replies, unread badges and grouped alerts retain their existing behavior.
