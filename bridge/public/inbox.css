@@ -3,3 +3,5 @@
 @media(max-width:600px){header{flex-wrap:wrap;gap:12px}header #connection{width:100%}.inbox-main h1{font-size:28px}}
 
 .inbox-card:active{background:var(--surface)}.inbox-main .text-button{min-height:44px;min-width:44px}
+
+.inbox-answer.markdown{white-space:normal}

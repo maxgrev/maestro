@@ -40,10 +40,12 @@ export class Herdr {
   }
   private target(a: Agent): Target {
     const names: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', pi: 'Pi' };
-    const terminalTitle = a.terminal_title_stripped?.split(' | ')[0];
-    const title = terminalTitle && /[\p{L}\p{N}]/u.test(terminalTitle) ? terminalTitle : this.config.projects.find(p => p.path === a.cwd)?.name || 'Conversation';
-    const name = a.name?.startsWith('m-') ? `${names[a.agent ?? ''] ?? a.agent} / ${title}` : a.name || a.title || a.agent || 'Agent';
-    return { id: `herdr:${a.pane_id}:${identity(a)}`, name, provider: 'herdr', detail: a.cwd || '', status: a.agent_status,
+    const name = names[a.agent ?? ''] ?? a.agent ?? 'Agent';
+    const title = a.terminal_title_stripped?.split(' | ')[0]?.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+    const named = a.name && !a.name.startsWith('m-') ? a.name : a.title;
+    const chat = title && /[\p{L}\p{N}]/u.test(title) ? title : named;
+    const detail = chat && chat.toLowerCase() !== name.toLowerCase() && chat !== a.cwd ? chat : '';
+    return { id: `herdr:${a.pane_id}:${identity(a)}`, name, provider: 'herdr', detail, status: a.agent_status,
       available: ['idle', 'done'].includes(a.agent_status), pane: a.pane_id, identity: identity(a),
       character: ['codex', 'claude', 'pi'].includes(a.agent ?? '') ? a.agent as Target['character'] : undefined };
   }
@@ -54,7 +56,7 @@ export class Herdr {
     const ready = await Promise.all(this.config.agents.map(agentReadiness));
     const names = { codex: 'Codex', claude: 'Claude Code', pi: 'Pi' };
     const fresh: Target[] = this.config.projects.flatMap(p => this.config.agents.map(kind => ({
-      id: `new:${kind}:${p.id}`, name: `New ${names[kind]}`, provider: 'herdr', detail: p.name,
+      id: `new:${kind}:${p.id}`, name: `New ${names[kind]}${this.config.projects.length > 1 ? ' / ' + p.name : ''}`, provider: 'herdr', detail: '',
       status: !ready.find(a=>a.kind===kind)?.installed ? 'Install in Maestro' : !ready.find(a=>a.kind===kind)?.signedIn ? 'Sign in on Mac' : kind==='codex'&&!p.trusted ? 'Choose project in Maestro' : 'new',
       available: ready.some(a=>a.kind===kind&&a.installed&&a.signedIn) && (kind!=='codex'||p.trusted===true), kind, project: p.id, character: kind,
     })));

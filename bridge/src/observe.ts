@@ -5,12 +5,13 @@ import { getSessionMessages, listSessions } from '@anthropic-ai/claude-agent-sdk
 import { completedMessages, messageReplyKey, piMessages, type ReplyMessage } from './agent-reply.js';
 import { withCodexReader, readCodexFinal, type CodexThread, type CodexTurn } from './codex-reply.js';
 import { agentBinary } from './agent-setup.js';
+import { syncCodexReads } from './read-state.js';
 import type { Config } from './config.js';
 import type { Inbox, InboxTarget } from './inbox.js';
 import type { Herdr, Agent } from './herdr.js';
 
-type Cursor = { stamp: number; keys: string[] };
-type Found = { key: string; reply: string; at?: number };
+type Cursor = { stamp: number; keys: string[]; version?: 1 };
+type Found = { key: string; reply: string; at?: number; read?: boolean };
 
 /** Keep final answers only. Never submit a prompt, resume a session, or grant approval. */
 export class Observer {
@@ -33,18 +34,21 @@ export class Observer {
   }
   async stop() { this.stopped = true; clearTimeout(this.timer); await this.running; }
   accept(source: string, stamp: number, target: InboxTarget, found: Found[]) {
+    this.inbox.describeSource(source, target);
     const cursor = this.inbox.cursor<Cursor>(source);
     const seen = new Set(cursor?.keys ?? []);
     for (const item of found) {
       // First scan baselines history. Explicit provider completion timestamps
       // also catch a turn that finished while Maestro was stopped.
       if (!seen.has(item.key) && (item.at != null ? item.at >= this.epoch : !!cursor)) {
-        this.inbox.add({ key: item.key, target, reply: item.reply, created: item.at });
+        this.inbox.add({ key: item.key, target, reply: item.reply, created: item.at, read: item.read });
       }
     }
-    this.inbox.saveCursor(source, { stamp, keys: [...new Set([...seen, ...found.map(i => i.key)])].slice(-2000) });
+    this.inbox.readSources(found.filter(item => item.read).map(item => item.key));
+    this.inbox.saveCursor(source, { stamp, version: 1, keys: [...new Set([...seen, ...found.map(i => i.key)])].slice(-2000) });
   }
   private async scan() {
+    await syncCodexReads(this.inbox);
     let sessions: { agent: Agent; target: InboxTarget }[] = [];
     try { sessions = await this.herdr.sessions(); this.warnings.delete('Herdr'); } catch { this.warnings.add('Herdr'); }
     const targetFor = (provider: string, session: string, fallback: InboxTarget) => sessions.find(s =>
@@ -84,6 +88,10 @@ export class Observer {
     for (const thread of threads) {
       if (this.stopped) break;
       const source = `codex:${thread.id}`, stamp = thread.updatedAt;
+      const target = targetFor('codex', thread.id, {
+        id: source, name: 'Codex', detail: thread.name || thread.preview.slice(0, 70) || '', character: 'codex',
+      });
+      this.inbox.describeSource(source, target);
       if (this.inbox.cursor<Cursor>(source)?.stamp === stamp && Date.now() - stamp * 1000 > 60_000) continue;
       try {
         const found = await withCodexReader(binary, async call => {
@@ -104,9 +112,7 @@ export class Observer {
           } while (cursor && !this.stopped);
           return found.reverse();
         });
-        this.accept(source, stamp, targetFor('codex', thread.id, {
-          id: source, name: `Codex / ${thread.name || thread.preview.slice(0, 70) || 'Conversation'}`, detail: thread.cwd, character: 'codex',
-        }), found);
+        this.accept(source, stamp, target, found);
       } catch { this.warnings.add('Codex'); }
     }
   }
@@ -120,7 +126,8 @@ export class Observer {
       for (const session of sessions) {
         if (session.lastModified < this.epoch) continue;
         const source = `claude:${session.sessionId}`;
-        if (this.inbox.cursor<Cursor>(source)?.stamp === session.lastModified) continue;
+        const cursor = this.inbox.cursor<Cursor>(source);
+        if (cursor?.version === 1 && cursor.stamp === session.lastModified) continue;
         try {
         const messages = (await getSessionMessages(session.sessionId, { dir: session.cwd }))
           .filter(m => !m.parent_tool_use_id && !m.parent_agent_id)
@@ -138,8 +145,8 @@ export class Observer {
           break;
         }
         this.accept(source, session.lastModified, targetFor('claude', session.sessionId, {
-          id: source, name: `Claude Code / ${session.customTitle || session.summary || 'Conversation'}`, detail: session.cwd, character: 'claude',
-        }), completedMessages(messages).map(r => ({ key: messageReplyKey('claude', session.sessionId, r.message), reply: r.reply, at: times.get(r.message.id) })));
+          id: source, name: 'Claude Code', detail: session.customTitle || session.summary || '', character: 'claude',
+        }), completedMessages(messages).map(r => ({ key: messageReplyKey('claude', session.sessionId, r.message), reply: r.reply, read: r.read, at: times.get(r.message.id) })));
         } catch { this.warnings.add('Claude'); }
       }
       if (sessions.length < 50) break;
@@ -154,12 +161,13 @@ export class Observer {
       try {
       const path = join(file.parentPath, file.name), info = await stat(path);
       const source = `pi:${basename(path, '.jsonl')}`;
-      if (info.mtimeMs < this.epoch || info.size > 32_000_000 || this.inbox.cursor<Cursor>(source)?.stamp === info.mtimeMs) continue;
+      const cursor = this.inbox.cursor<Cursor>(source);
+      if (info.mtimeMs < this.epoch || info.size > 32_000_000 || (cursor?.version === 1 && cursor.stamp === info.mtimeMs)) continue;
       const rows = await jsonLines(path), messages = piMessages(rows);
       const times = new Map(rows.filter(r => r.id && r.timestamp).map(r => [r.id, Date.parse(r.timestamp)]));
       this.accept(source, info.mtimeMs, targetFor('pi', path, {
-        id: source, name: `Pi / ${rows[0]?.cwd ? basename(rows[0].cwd) : 'Conversation'}`, detail: rows[0]?.cwd, character: 'pi',
-      }), completedMessages(messages).map(r => ({ key: messageReplyKey('pi', path, r.message), reply: r.reply, at: times.get(r.message.id) })));
+        id: source, name: 'Pi', detail: rows.findLast(r => r.type === 'session_info' && typeof r.name === 'string')?.name ?? '', character: 'pi',
+      }), completedMessages(messages).map(r => ({ key: messageReplyKey('pi', path, r.message), reply: r.reply, read: r.read, at: times.get(r.message.id) })));
       } catch { this.warnings.add('Pi'); }
     }
   }

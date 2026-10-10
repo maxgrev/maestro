@@ -23,12 +23,17 @@ export class Inbox {
   }
   add(item: InboxReply) {
     if (!item.reply.trim()) return;
+    const separator = item.key.lastIndexOf(':');
+    const source = separator < 0 ? item.key : item.key.slice(0, separator);
+    const through = this.cursor<number>(`read:${source}`) ?? 0;
+    const read = !!item.read || (item.created != null && item.created <= through);
     this.db.prepare(`INSERT INTO inbox(source,target,reply,attention,turn,created,read,alerted)
       VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(source) DO UPDATE SET
+      read=max(inbox.read,excluded.read), alerted=max(inbox.alerted,excluded.alerted),
       turn=CASE WHEN excluded.turn<>'' THEN excluded.turn ELSE inbox.turn END,
       target=CASE WHEN excluded.turn<>'' OR inbox.turn='' THEN excluded.target ELSE inbox.target END`)
       .run(item.key, JSON.stringify(item.target), item.reply, Number(!!item.attention), item.turn ?? '',
-        item.created ?? Date.now(), Number(!!item.read), Number(!!item.read));
+        item.created ?? Date.now(), Number(read), Number(read));
     return this.db.prepare('SELECT id FROM inbox WHERE source=?').get(item.key) as { id: number };
   }
   get(id: number) {
@@ -59,6 +64,24 @@ export class Inbox {
     this.db.exec('BEGIN');
     try { for (const id of ids) statement.run(id); this.db.exec('COMMIT'); }
     catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  readSources(keys: string[]) {
+    const update = this.db.prepare('UPDATE inbox SET read=1,alerted=1 WHERE source=? AND read=0');
+    for (const key of keys) update.run(key);
+  }
+  describeSource(source: string, target: InboxTarget) {
+    const prefix = source + ':';
+    this.db.prepare(`UPDATE inbox SET target=json_set(target,'$.name',?,'$.detail',?)
+      WHERE substr(source,1,?)=? AND (json_extract(target,'$.name')<>? OR coalesce(json_extract(target,'$.detail'),'')<>?)`)
+      .run(target.name, target.detail ?? '', prefix.length, prefix, target.name, target.detail ?? '');
+  }
+  readThrough(source: string, through: number) {
+    if (!Number.isFinite(through) || through <= 0) return;
+    through = Math.max(through, this.cursor<number>(`read:${source}`) ?? 0);
+    this.saveCursor(`read:${source}`, through);
+    const prefix = source + ':';
+    this.db.prepare('UPDATE inbox SET read=1,alerted=1 WHERE substr(source,1,?)=? AND created<=? AND read=0')
+      .run(prefix.length, prefix, through);
   }
   readTurn(turn: string) { this.db.prepare('UPDATE inbox SET read=1,alerted=1 WHERE turn=?').run(turn); }
   cursor<T>(source: string): T | undefined {

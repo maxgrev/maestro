@@ -340,7 +340,7 @@ void maestro_init(void)
     s_caption = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
     configASSERT(s_lock && s_jobs && s_events && s_audio && s_caption);
     s_reply = (maestro_reply_t){.text = s_caption, .capacity = CAPTION_BYTES};
-    s_targets[0] = (target_t){.id = "muse", .name = "Muse", .detail = "Your daily assistant", .available = true};
+    s_targets[0] = (target_t){.id = "muse", .name = "Muse", .available = true};
     s_selected = s_targets[0]; s_count = 1;
     nvs_handle_t handle;
     if (nvs_open("maestro", NVS_READONLY, &handle) == ESP_OK) {
@@ -513,8 +513,7 @@ static void navigate(unsigned key)
 }
 static void session_label(void)
 {
-    const char *session = strstr(s_selected.name, " / ");
-    lv_label_set_text(s_label, session ? session + 3 :
+    lv_label_set_text(s_label, s_selected.detail[0] ? s_selected.detail :
         s_selected.character >= 2 && !strncmp(s_selected.name, "New ", 4) ? "New session" : "");
 }
 static void select_target(const target_t *target)
@@ -643,13 +642,13 @@ static void list_render(void)
         lv_obj_set_size(label, lv_pct(100), lv_font_get_line_height(&maestro_font_20));
         lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
         lv_label_set_text(label, target->name);
-        lv_obj_align(label, target->available && !target->detail[0] ? LV_ALIGN_LEFT_MID : LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_align(label, !target->detail[0] ? LV_ALIGN_LEFT_MID : LV_ALIGN_TOP_LEFT, 0, 0);
         lv_obj_t *detail = lv_label_create(text);
         lv_obj_set_style_text_font(detail, &maestro_font_16, 0);
         lv_obj_set_style_text_color(detail, lv_color_hex(target->available ? 0xb7c9c1 : 0xd7b98b), 0);
         lv_obj_set_size(detail, lv_pct(100), lv_font_get_line_height(&maestro_font_16));
         lv_label_set_long_mode(detail, LV_LABEL_LONG_MODE_DOTS);
-        lv_label_set_text(detail, target->available ? target->detail : target->status);
+        lv_label_set_text(detail, target->detail);
         lv_obj_align(detail, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         {
             lv_obj_t *selected = lv_label_create(button);

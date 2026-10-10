@@ -73,7 +73,7 @@ static void inbox_ui_tick(void)
             s_visible_count = 0; list_render();
         } else if (job.kind == INBOX_DETAIL && atomic_load(&s_picker_open)) {
             text_copy(s_reader_copy, field(json, "reply"), CAPTION_BYTES);
-            lv_label_set_text_static(s_reader_text, s_reader_copy);
+            reader_set_text();
             lv_label_set_text(s_reader_note, cJSON_IsTrue(cJSON_GetObjectItem(json, "truncated")) || strlen(field(json, "reply")) >= CAPTION_BYTES ? "Continues in Maestro on Mac" : "");
             lv_obj_scroll_to_y(s_reader_scroll, 0, LV_ANIM_OFF);
             s_reader_inbox = true; open_reader(NULL);

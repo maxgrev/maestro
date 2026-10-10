@@ -274,3 +274,15 @@ test('watch inbox reads are bounded at a UTF-8 boundary while the Mac retains th
   const full=(await f.app.inject({url:`/api/inbox/${item.id}`,headers:auth})).json();assert.equal(full.reply,text);
   await f.app.close();f.store.close();
 });
+
+test('the local reader gets safe Markdown HTML while the device keeps the original reply',async()=>{
+  const f=fixture(),local=buildServer(f.service,{local:true}),text='# Answer\n\n**Complete**';
+  try {
+    const item=f.store.inbox.add({key:'markdown',target:{id:'codex:test',name:'Codex'},reply:text})!;
+    const device=(await f.app.inject({url:`/api/inbox/${item.id}`,headers:auth})).json();
+    const desktop=(await local.inject({url:`/api/inbox/${item.id}`,headers:{host:'localhost:4210'}})).json();
+    assert.equal(device.reply,text);assert.equal(device.replyHtml,undefined);
+    assert.equal(desktop.reply,text);assert.match(desktop.replyHtml,/<strong>Complete<\/strong>/);
+    assert.equal(f.store.inbox.get(item.id)?.read,false); // Fetching alone is not a read.
+  } finally {await local.close();await f.app.close();f.store.close();}
+});

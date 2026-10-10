@@ -34,7 +34,7 @@ for path in (ROOT / "firmware/src").rglob("*"):
         dest.parent.mkdir(parents=True, exist_ok=True)
         copy_changed(path, dest)
 # One firmware image for every user. Credentials arrive over USB and stay in NVS.
-edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"\n        "maestro_settings.c"\n        "maestro_avatar.c"\n        "maestro_reply.c"\n        "maestro_font.c"')
+edit(MUSE / "CMakeLists.txt", '"muse_app.c"', '"muse_app.c"\n        "maestro.c"\n        "maestro_settings.c"\n        "maestro_avatar.c"\n        "maestro_reply.c"\n        "maestro_font.c"\n        "maestro_markdown.c"\n        "vendor/md4c/md4c.c"')
 edit(MUSE / "muse_app.c", '#include "muse_audio.h"', '#include "maestro.h"\n#include "muse_audio.h"')
 edit(MUSE / "muse_app.c", "    muse_state_init();", "    muse_state_init();\n    maestro_init();")
 edit(MUSE / "muse_ui.c", '#include "muse_state.h"', '#include "muse_state.h"\n#include "maestro.h"')

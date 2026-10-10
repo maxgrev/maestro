@@ -12,4 +12,8 @@ Bitmap type, pixel symbols, flat cards, square switches and sliders now cover th
 
 All portraits come from their full-screen character. Muse and Clawd retain their original pixel animation; Codex keeps the original poses on a fixed pixel grid. Grok uses a round stepped outline and expressive eyes. Pi retains its three-color mark. Dot uses the owner's mint diamond and sunglasses, with an eight-color sprite and small state reactions. See [art sources, generation prompt and encoders](../firmware/src/avatars/SOURCES.md).
 
+Pi's mark now has pixel eyes and a yellow hand: it looks toward speech, scans while thinking, bounces with speech level, reacts to an error, and sleeps. Codex gains a dim sleep pose and rising pixel Z. Clawd uses its existing happy animation on a pet reaction. Grok's silhouette moves only in whole cells to avoid a shimmering rim. Dot's error shake settles, and its glasses glint and sleep state remain on the same pixel grid. Muse's art and animation code are unchanged.
+
+Agent rows separate the provider name from the chat title. The subtitle contains only a known chat title; new chats and companions without titles leave it blank. Connection instructions and project paths no longer take its place.
+
 The native renderer still owns animation, captions, audio levels and touch. Maestro pauses covered drawing while the picker or reader is open. Closing an overlay resumes the current state. Replies, unread badges and grouped alerts retain their existing behavior.

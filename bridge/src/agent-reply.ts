@@ -72,7 +72,8 @@ export function messageReplyKey(provider: string, session: string, message: Repl
   return `${provider}:${basename(session, '.jsonl')}:${message.message.id ?? message.id}`;
 }
 export function completedMessages(messages: ReplyMessage[]) {
-  const records = new Map<string, { message: ReplyMessage; text: string; reply: string }>();
+  const records = new Map<string, { message: ReplyMessage; text: string; reply: string; read: boolean }>();
+  const lastInput = messages.findLastIndex(m => m.role === 'user' && textContent(m.message.content).trim());
   let input = '';
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i]!;
@@ -80,7 +81,7 @@ export function completedMessages(messages: ReplyMessage[]) {
     if (m.role !== 'assistant' || !['end_turn', 'stop'].includes(m.message.stop_reason ?? m.message.stopReason ?? '')) continue;
     const parts = m.message.id ? messages.slice(0, i + 1).filter(x => x.role === 'assistant' && x.message.id === m.message.id) : [m];
     const reply = parts.map(x => textContent(x.message.content).trim()).filter(Boolean).join('\n\n');
-    if (reply) records.set(m.message.id ?? m.id, { message: m, text: input, reply });
+    if (reply) records.set(m.message.id ?? m.id, { message: m, text: input, reply, read: i < lastInput });
   }
   return [...records.values()];
 }

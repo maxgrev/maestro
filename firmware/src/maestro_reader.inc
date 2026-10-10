@@ -1,7 +1,15 @@
 // UI task only. The label owns a snapshot, never the worker's mutable reply.
 static lv_obj_t *s_reader, *s_reader_scroll, *s_reader_text, *s_reader_note;
 static lv_obj_t *s_reader_page_buttons[2];
-static char *s_reader_copy;
+#include "maestro_markdown.h"
+static char *s_reader_copy, *s_reader_markdown;
+static void reader_set_text(void)
+{
+    bool formatted = maestro_markdown(s_reader_copy, s_reader_markdown, CAPTION_BYTES * 2);
+    // Keep literal # and code intact. LVGL recolor escapes can corrupt wrapping.
+    lv_label_set_recolor(s_reader_text, false);
+    lv_label_set_text_static(s_reader_text, formatted ? s_reader_markdown : s_reader_copy);
+}
 static uint32_t s_reader_version, s_auto_read_gen = UINT32_MAX;
 static uint32_t s_reader_generation;
 static atomic_int s_reader_y, s_reader_remaining;
@@ -74,7 +82,7 @@ static void reader_tick(void)
     xSemaphoreGive(s_lock);
     if (changed) {
         int32_t y = lv_obj_get_scroll_y(s_reader_scroll);
-        lv_label_set_text_static(s_reader_text, s_reader_copy);
+        reader_set_text();
         lv_obj_update_layout(s_reader_scroll);
         lv_obj_scroll_to_y(s_reader_scroll, s_reader_copy[0] && generation == s_reader_generation ? y : 0, LV_ANIM_OFF);
         s_reader_generation = generation;
@@ -104,7 +112,8 @@ static void reader_tick(void)
 static void reader_build(void)
 {
     s_reader_copy = heap_caps_calloc(CAPTION_BYTES, 1, MUSE_BIG_CAPS);
-    configASSERT(s_reader_copy);
+    s_reader_markdown = heap_caps_calloc(CAPTION_BYTES * 2, 1, MUSE_BIG_CAPS);
+    configASSERT(s_reader_copy && s_reader_markdown);
     lv_obj_t *label;
     s_reader = lv_obj_create(lv_screen_active());
     lv_obj_remove_style_all(s_reader);
@@ -154,7 +163,7 @@ static void reader_build(void)
     lv_obj_set_style_text_line_space(s_reader_text, 5, 0);
     lv_obj_set_style_text_color(s_reader_text, lv_color_hex(0xeeeaf5), 0);
     lv_label_set_long_mode(s_reader_text, LV_LABEL_LONG_MODE_WRAP);
-    lv_label_set_text_static(s_reader_text, s_reader_copy);
+    reader_set_text();
     s_reader_note = lv_label_create(s_reader);
     lv_obj_set_style_text_font(s_reader_note, &maestro_font_16, 0);
     lv_obj_align(s_reader_note, LV_ALIGN_TOP_MID, 0, 410);

@@ -74,6 +74,7 @@ def main():
     shutil.copy2(ROOT / ".cache/whisper.cpp/LICENSE", notices / "whisper.txt")
     copytree(ROOT / "docs/licenses", notices / "Speech")
     shutil.copy2(ROOT / "docs/licenses/Pixel-font.txt", notices / "Pixel-font.txt")
+    shutil.copy2(ROOT / "firmware/src/vendor/md4c/LICENSE.md", notices / "MD4C.txt")
     shutil.copy2(ROOT / "firmware/src/avatars/Clawd-LICENSE.txt", notices / "Clawd-LICENSE.txt")
     shutil.copy2(ROOT / "firmware/src/avatars/SOURCES.md", notices / "Character-sources.md")
     for file in Path('/opt/homebrew/opt/lame').glob('COPYING*'): shutil.copy2(file, notices / ("LAME-" + file.name))

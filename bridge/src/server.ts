@@ -9,6 +9,7 @@ import { UserError } from './types.js';
 import type { Onboarding } from './onboarding.js';
 import { AgentSetup } from './agent-setup.js';
 import { voices } from './speech.js';
+import { renderMarkdown } from './markdown.js';
 import { DotServer } from './dot-server.js';
 
 function tokenMatches(header: string | undefined, token: string | undefined) {
@@ -66,7 +67,7 @@ export function buildServer(service: Service, options: { local?: boolean; https?
         return { ...item, reply: bytes.subarray(0, end).toString('utf8'), truncated: true };
       }
     }
-    return item;
+    return options.local ? { ...item, replyHtml: renderMarkdown(item.reply) } : item;
   });
   app.post('/api/inbox/ack', req => {
     const b = z.object({ ids: z.array(z.number().int().positive().safe()).max(64), kind: z.enum(['read', 'alert']) }).strict().parse(req.body);
@@ -82,7 +83,8 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     if (b.read && item) service.store.inbox.acknowledge([item.id], 'read');
     return { ok: true };
   });
-  app.get('/api/turns', async () => ({ turns: service.store.list() }));
+  app.get('/api/turns', async () => ({ turns: service.store.list().map(turn => options.local
+    ? { ...turn, replyHtml: renderMarkdown(turn.reply) } : turn) }));
   app.get('/api/turns/:id', async (req, reply) => {
     const { id } = z.object({ id: requestId }).parse(req.params);
     const { wait } = z.object({ wait: z.coerce.number().int().min(0).max(5000).default(0) }).strict().parse(req.query);

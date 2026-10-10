@@ -34,7 +34,7 @@ function renderTargets() {
     row.dataset.target=target.id;
     row.setAttribute('aria-pressed',String(selected===target.id));
     const character=el('span',undefined,'companion '+(target.character||'pi'));character.setAttribute('aria-hidden','true');character.append(el('i'),el('i'),el('b'));row.append(character);
-    const meta=el('span',undefined,'agent-meta'); meta.append(el('span',target.name,'agent-name'),el('span',target.detail||'Existing session','agent-detail'));
+    const meta=el('span',undefined,'agent-meta'); meta.append(el('span',target.name,'agent-name'),el('span',target.detail,'agent-detail'));
     row.append(meta,el('span',target.status==='new'?'New session':labels[target.status]||target.status,'agent-status'));
     const unread=unreadCounts.find(c=>c.target===target.id)?.unread;
     if(unread)row.append(el('span',String(unread)+' unread','agent-status'));
@@ -69,18 +69,34 @@ async function listen(text, button, turnId) {
     await playing.play();
   } catch(e) { if(generation===playback){if(e.name!=='AbortError')$('error').textContent=e.message;stopSpeech();} }
 }
+const readTurns=new Set(), pendingReads=new Set();
+const reads=new IntersectionObserver(entries=>{
+  if(document.visibilityState!=='visible')return;
+  for(const entry of entries)if(entry.isIntersecting)void readVisible(entry.target);
+});
+async function readVisible(element){
+  const id=element.dataset.readTurn;
+  if(!id||readTurns.has(id)||pendingReads.has(id))return;
+  pendingReads.add(id);
+  try{const r=await fetch('/api/inbox/read-turn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({turn:id})});if(r.ok)readTurns.add(id);}
+  catch{/* Retry when the reply is visible again. */}
+  finally{pendingReads.delete(id);}
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible')document.querySelectorAll('[data-read-turn]').forEach(e=>{reads.unobserve(e);reads.observe(e);});
+});
 function renderTurns() {
   const signature=JSON.stringify(turns); if(signature===lastTurns)return;lastTurns=signature;
-  const list=$('activity');list.replaceChildren();$('activity-count').textContent=turns.length?String(turns.length):'';
+  const list=$('activity');reads.disconnect();list.replaceChildren();$('activity-count').textContent=turns.length?String(turns.length):'';
   if(!turns.length)list.append(el('p','Your requests and replies will appear here.','empty'));
   for(const turn of turns) {
     const card=el('article',undefined,'turn'),head=el('div',undefined,'turn-heading');
     head.append(el('strong',turn.target.name),el('span',labels[turn.state]||turn.state,'state-'+turn.state));card.append(head);
     card.append(el('p',turn.text||'Voice message'));
-    if(turn.reply){card.append(el('p',turn.reply,'reply'));const b=el('button',playingTurn===turn.id?(playing?'Stop':'Cancel voice'):'Listen','listen');b.dataset.voice=turn.id;b.onclick=()=>listen(turn.reply,b,turn.id);card.append(b);}
+    if(turn.reply){const answer=el('div',undefined,'reply markdown');if(turn.replyHtml!==undefined)answer.innerHTML=turn.replyHtml;else answer.textContent=turn.reply;answer.dataset.readTurn=turn.id;card.append(answer);const b=el('button',playingTurn===turn.id?(playing?'Stop':'Cancel voice'):'Listen','listen');b.dataset.voice=turn.id;b.onclick=()=>listen(turn.reply,b,turn.id);card.append(b);}
     if(turn.output){const d=el('details'),summary=el('summary','Latest terminal output');d.append(summary,el('pre',turn.output));card.append(d);}
     if(turn.error)card.append(el('p',turn.error,'error'));
-    list.append(card);
+    list.append(card);const answer=card.querySelector('[data-read-turn]');if(answer)reads.observe(answer);
   }
   renderWatch();
 }
