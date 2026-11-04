@@ -84,6 +84,7 @@ def main():
     copytree(ROOT / ".tools/kokoro", tools / "kokoro")
     shutil.copy2(lame, tools / "lame")
     copytree(ROOT / "bridge/public", RES / "bridge/public")
+    shutil.copy2(ROOT / "desktop/assets/AppIcon.icns", RES / "AppIcon.icns")
     (RES / "scripts").mkdir()
     for name in ["device.py", "grok-reply.py", "speech.py"]: shutil.copy2(ROOT / "scripts" / name, RES / "scripts" / name)
     for name in ["package.json", "package-lock.json"]: shutil.copy2(ROOT / name, RES / name)
@@ -116,7 +117,7 @@ def main():
                 shutil.copy2(path, target)
     run(sys.executable, "scripts/fetch-licenses.py")
     (notices / "README.txt").write_text("Maestro's own source: MIT. The existing Codex companion and native Muse artwork retain their own rights; confirm redistribution terms before publishing. See THIRD_PARTY_NOTICES.md and Character-sources.md for dependencies and art. Speech tools retain their GPL/LGPL terms; SOURCES.txt explains how to rebuild or replace them. Publish the matching Maestro source and third-party source archives beside this app. Node, Python, JavaScript and Python packages retain their own license files. Source: https://github.com/maxgrev/maestro\n")
-    info = {"CFBundleIdentifier": "dev.maestro.stopwatch", "CFBundleName": "Maestro", "CFBundleExecutable": "Maestro", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": version, "CFBundleVersion": version, "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True, "NSLocalNetworkUsageDescription": "Maestro connects your StopWatch to agents on this Mac.", "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True}}
+    info = {"CFBundleIdentifier": "dev.maestro.stopwatch", "CFBundleName": "Maestro", "CFBundleExecutable": "Maestro", "CFBundleIconFile": "AppIcon", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": version, "CFBundleVersion": version, "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True, "NSLocalNetworkUsageDescription": "Maestro connects your StopWatch to agents on this Mac.", "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True}}
     (APP / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
     run("swiftc", "-parse-as-library", "-target", "arm64-apple-macos14.0", "-module-cache-path", str(ROOT / ".cache/swift"), "-O", "-framework", "AppKit", "-framework", "WebKit", str(ROOT / "desktop/Maestro.swift"), "-o", str(APP / "Contents/MacOS/Maestro"))
     # Local development signature. A public release needs Developer ID + notarization.

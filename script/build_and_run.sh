@@ -19,6 +19,8 @@ else
   # Reuse the packaged runtimes and the project's stable compiler cache for UI work.
   npm run check
   cp -R bridge/public/. "$RESOURCES/bridge/public/"
+  cp desktop/assets/AppIcon.icns "$RESOURCES/AppIcon.icns"
+  /usr/libexec/PlistBuddy -c 'Set :CFBundleIconFile AppIcon' "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string AppIcon' "$APP_BUNDLE/Contents/Info.plist"
   node_modules/.bin/tsc --noEmit false --rootDir bridge --outDir "$RESOURCES/bridge"
   rm -rf "$RESOURCES/bridge/test"
   swiftc -parse-as-library -target arm64-apple-macos14.0 -module-cache-path "$ROOT_DIR/.cache/swift" -O -framework AppKit -framework WebKit desktop/Maestro.swift -o "$APP_BUNDLE/Contents/MacOS/Maestro"
