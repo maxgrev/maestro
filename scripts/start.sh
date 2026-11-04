@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$PWD/.tools:$PWD/node_modules/.bin:$PATH"
+node --import tsx bridge/src/setup.ts
 if ! scripts/herdr.sh agent list >/dev/null 2>&1; then
   mkdir -p .local
   nohup scripts/herdr.sh server > .local/herdr-server.log 2>&1 </dev/null &

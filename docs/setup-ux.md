@@ -1,46 +1,68 @@
 # Guided setup
 
-Goal: someone with no coding experience can connect the StopWatch and talk to their agents. They should not need a terminal, token file, IP address, or firmware build.
+The setup flow serves a StopWatch C152 owner on an Apple Silicon Mac. The
+signed app supplies its tools and firmware; source users first run
+`scripts/bootstrap.sh` as described in the README.
 
-The Mac app now runs this flow:
+## Device
 
-1. **Connect your StopWatch.** Detect the board over USB, save a recovery image for its chip MAC, verify checksums, and install generic firmware. Show each operation's progress. A retry requires a new click.
-2. **Connect to Wi-Fi.** Save a 2.4 GHz network or phone hotspot. The Away from home section checks Tailscale, guides its account steps, and enables a stable HTTPS connection. Verify the authenticated route before saving it to the StopWatch. Local-only use keeps the Mac's Bonjour address and certificate pin.
-3. **Connect your agents.** Show installed agents and the account steps each one needs. Reuse provider login commands and existing sessions. Install pinned official coding-agent packages in the app's data directory. Send the Mac's URL, pin, device token, and Muse SDK token over USB; never compile personal credentials into the image.
-4. **Try one message.** Show the verified device, Wi-Fi, Mac connection, and Muse pairing states. Open the device's agent picker, explain the buttons, and prompt the user to try a message. This step does not claim a voice test passed just because a connection exists.
+Detect ESP32 USB devices and ask the user to confirm the StopWatch model.
+Before writing, verify the chip's identity, 16 MB flash, generic firmware
+manifest, and that board's recovery image and checksum. Show progress and
+retain the backup. Retry only on a new user action.
 
-What this setup exposed:
+Source bootstrap builds the firmware before it starts the bridge. If the
+firmware files are missing, setup shows how to build them or reinstall the
+downloaded app. It must not hide the missing step without an explanation.
 
-- Adding a Muse token now updates NVS over USB. The firmware reads it through the SDK's identity hook and reboots after an atomic save. The cached build configuration also receives every explicit Maestro override, so a new option cannot silently stay disabled.
-- Muse's current SDK uses its phone app for device discovery and account pairing. Developer mode and Bluetooth permission are current prerequisites. Keep the provider's account consent and physical pairing confirmation; explain them at the right time.
-- The first Muse pairing attempt disconnected after device confirmation. A fresh discovery attempt completed setup. Show pairing progress and offer a clear retry that preserves existing Wi-Fi settings.
-- Grok routine runs start fresh. Maestro now supplies recent context from its saved receipts. Keep this behavior out of setup choices.
-- Grok replies use its existing Mac connection. Remote access lets the StopWatch reach that Mac from other networks; it does not move the bot or coding sessions to a cloud host.
-- Codex's folder-trust prompt needs an explicit choice in project setup. Save that choice for the exact folder and retain normal tool approvals. Pass the path as a TOML table because Codex's command-line dotted-key parser does not handle quoted paths.
-- A connected USB cable does not grant control of an iPhone. iPhone Mirroring needs the user's local authentication. This is a development aid, not part of the product setup flow.
+## Wi-Fi
 
-Do not hide an unfinished connection behind a green indicator. Show **Ready** only after a real request and reply. Keep recovery available, preserve provider approval rules, and never resend uncertain actions automatically.
+Save a 2.4 GHz network or phone hotspot over USB. Away from home guides the
+user through installing and signing in to Tailscale, then verifies the public
+device endpoint before saving its address. Do not replace another Tailscale
+service. Local-only use keeps the Mac's pinned certificate.
 
-The device has two programmable buttons and a power button. Yellow handles talk, pairing confirmation, and menu selection. Blue opens and steps through agents. From the home screen, holding blue or swiping left opens the same SDK settings page. In a menu, holding blue goes back. Blue focuses the next control; yellow selects, toggles, or steps a slider. Touch uses the same controls. Volume and mute live under Sound. The character identifies the agent, with a small title for coding sessions. A short vibration confirms a choice. The firmware remembers the selected identity, verifies it after reconnecting, and refuses unavailable sessions instead of falling back to a different agent.
+The watch remembers one network. Explain when a save replaces it. Never
+expose setup's localhost port 4210 through a tunnel.
 
-The device UI audit checked native 466-pixel captures of home, agents, settings, Sound, and the thinking state. It caught clipped bottom rows; the final layout keeps whole rows visible at rest and scrolls the focused control into view. Button events use a small queue so quick presses keep their order during redraws. USB checks exercised navigation, speaker switching, saved volume, and menu transitions, then restored the original values and agent. The Mac guide uses the same button positions and controls. Finger swipes and the physical feel of long-press still need an in-hand check; the guide was checked in the desktop app, not at phone or tablet sizes.
+## Agents
 
-Characters identify providers through shape as well as color. Muse retains its SDK character; the others use the same canvas, frame timing, and reply layouts. Expression follows real voice state. No extra animation engine or image download is needed.
+Every agent is optional. Keep provider consent, account sign-in, and tool
+approvals with that provider. Install coding agents in Maestro's data folder
+using the bundled npm in the app or the npm that launched the source bridge.
+Never change the user's global package installation.
 
-The agent picker uses thumbnails rendered from that same artwork. Its scroll area reaches the circular screen edge. Cards change width to fit the curve, and a button-selected row moves into the readable middle before confirmation. The list keeps its position when the Mac returns unchanged agents. Connection errors appear below the header, away from the rows. Back has a separate 92 × 52 touch target at the top center in agents, replies, and settings; the title sits between the yellow and blue button hints.
+Project selection names an existing folder. Codex trust applies to that exact
+folder and needs an explicit user choice. Changing folders clears that trust.
+Muse pairing uses its phone app and a personal SDK token. Grok setup supplies
+a helper command tailored to the current install. Dot has its own scoped
+plugin connection and requires remote access.
 
-Tap the reply text to open the latest answer. The reader shows ten lines in a larger font, supports touch scrolling, and pages by nine whole lines with yellow and blue. It keeps straight text margins clear of the curved edge and retains the reading position when closed and reopened. Hold blue or tap Back to leave. Muted replies open it once; dismissing it keeps it closed for that reply. A new message or agent clears the old reply.
+Save the Mac address, certificate pin or public TLS mode, device key, and
+optional Muse token over USB. Generic firmware contains none of these values.
 
-The reader stores Muse's streamed messages as well as complete bridge replies. A final Muse message replaces its earlier pieces, and late replies cannot cross an agent change. Storage is bounded at 64,000 bytes; longer answers show a notice to continue on the Mac. The audit checked native captures of the header, all provider thumbnails, and the first, middle, and last pages. It led to whole-line paging and explicit navigation styling. USB checks reached the last line of a 4,242-byte reply, verified both paging directions, mute opening, dismissal, retained position, fresh-reply reset, and menu transitions. They preserved the selected Claude session and sound settings. Touch scrolling and the physical feel of the buttons still need an in-hand check. The StopWatch has one fixed size and dark theme; the Mac guide retains its existing reduced-motion rule.
+## Try it
 
-The round-screen pass checked native captures of the first, selected, and last agent rows, the expanded reader, Settings, and the Mac-offline state. It separated Back from the side controls and caught stale card widths when the connection message moved the list. The final layout recalculates those widths after layout. The same USB navigation and long-reply checks passed with ten visible lines and a nine-line page step.
+Show the verified USB, Wi-Fi, bridge, and pairing states. Opening the agent
+picker is a connection check; a real voice request and answer are a separate
+acceptance check. Do not label an unchecked integration Ready. Missing or
+busy saved conversations stay unavailable rather than changing recipients.
 
-Agents → Voice offers four local Kokoro voices and the previous macOS voice. Preview works before saving, and the saved choice applies to the next reply. Conversation playback has Cancel and Stop controls. The native app audit checked previews, voice selection, saved settings, playback cancellation, and provider characters. It caught an oversized Grok list icon and a false Ready label for agents awaiting sign-in; both were fixed. Phone and tablet layouts and reduced-motion rendering still need a browser check; the browser tool could not inspect its stale error tab. The app currently has one dark theme.
+The watch's yellow button records or confirms. Blue opens or advances menus;
+holding blue opens settings or goes back. Touch uses the same controls.
+Volume and mute live under Sound. Agent characters and title text identify
+the recipient. Tap reply text to expand the reader.
 
-The bridge stopped between development sessions, which made the original device appear Muse-only. The Mac app now owns the bridge process and stays alive when its window closes. It reuses an existing bridge if one already owns the ports. The device retries discovery after Wi-Fi connects and shows a Mac-offline message when needed.
+## Verification
 
-Still required before a broad release: Developer ID signing and notarization, a clean second-Mac test, bundled-license distribution review, fresh Claude/Pi sign-in checks, human speaker-quality and battery tests. Muse's phone app and Grok's routine UI still own their account and consent steps. Do not advertise fully automatic provider setup or arbitrary existing desktop-chat access.
+Automated tests cover concurrent setup writes, secret-free status, explicit
+flash confirmation, reply isolation, folder trust, and failed-write handling.
+The renderer test checks every agent and mode against full redraws, including
+clipped display strips, with address and undefined-behavior sanitizers.
 
-The reply preview is now the only home-screen entry to the reader; it stays visible after playback and gives press feedback over a padded tap target. The recording timer caption no longer repeats the header or collides with the meter. Muse's live transcript remains visible. Grok's picker title is centered without the technical routine subtitle. The latest audit used native listening, thinking, reply-preview, and picker captures, plus the full reader navigation check. Grok's native-resolution renderer covers listening, thinking, speaking, error, sleep, and happy reactions. The character memory/damage test includes pet intensity. Actual finger taps and their physical feel remain an in-hand check.
-
-The remote-access pass keeps the existing Mac layout, controls, and dark theme. It adds the account steps under Wi-Fi without a separate wizard. The audit covered the native app, 390-pixel phone and 820-pixel tablet layouts, scrolling, and the disconnected state. It removed success coloring from unchecked device and Wi-Fi states. There is no second theme, and this pass did not emulate reduced-motion preferences; its existing rule remains in place.
+Keep the existing dark pixel interface. Test changed setup states at desktop,
+tablet, and phone widths, with keyboard focus and reduced motion. The watch
+has one fixed display size and dark theme. Physical button feel, finger
+gestures, speaker quality, battery life, and a fresh second-Mac install need
+in-hand testing. Record those checks for each release rather than carrying
+old results forward as proof.

@@ -26,6 +26,7 @@ function render() {
   $('device-state').classList.toggle('check-result',!!d&&d.maestro.version>=2);
   $('device-next').disabled=busy||!d||d.maestro.version<2;
   $('install-area').hidden=!port||!state.firmware;
+  $('firmware-missing').hidden=state.firmware;
   $('install').disabled=busy||!$('confirm-model').checked;
   $('inspect').disabled=busy||!port;
   $('wifi-state').textContent=d?.wifi.state==='connected'?'Connected to '+d.wifi.ssid: 'Wi-Fi has not been checked yet.';

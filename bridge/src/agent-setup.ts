@@ -16,6 +16,15 @@ export async function connectAgent(kind: Kind, herdr: string) {
   await exec(herdr, ['integration', 'install', kind], { timeout: 10000, maxBuffer: 16000 });
 }
 const packages: Record<Kind,string> = { codex:'@openai/codex@0.160.0', claude:'@anthropic-ai/claude-code@2.1.296', pi:'@mariozechner/pi-coding-agent@0.73.1' };
+export function npmCommand(root = process.cwd(), env: NodeJS.ProcessEnv = process.env): { binary: string; args: string[] } {
+  const scripts = [resolve(root, '.tools/node/lib/node_modules/npm/bin/npm-cli.js'), env.npm_execpath];
+  const script = scripts.find(path => path && existsSync(path));
+  if (script) return { binary: process.execPath, args: [script] };
+  const binary = (env.PATH ?? '').split(delimiter).filter(Boolean).map(dir => join(dir, 'npm'))
+    .find(path => { try { accessSync(path, constants.X_OK); return true; } catch { return false; } });
+  if (binary) return { binary, args: [] };
+  throw new UserError('npm is missing. Run scripts/bootstrap.sh, then start Maestro with npm start.');
+}
 export function agentBinary(kind: Kind): string | undefined {
   return [resolve(localDir,'agents/bin'),resolve(localDir,'bin'),resolve('.tools'),...(process.env.PATH??'').split(delimiter)]
     .map(dir=>join(dir,kind)).find(path=>{try{accessSync(path,constants.X_OK);return true;}catch{return false;}});
@@ -47,10 +56,9 @@ export class AgentSetup {
     if(this.job?.state==='working')throw new UserError('An agent setup step is already running.',409);
     let binary:string,args:string[];
     if(action==='install') {
-      binary=process.execPath;
-      const npm=resolve('.tools/node/lib/node_modules/npm/bin/npm-cli.js');
-      if(!existsSync(npm))throw new UserError('Open the Maestro Mac app to install agents.');
-      args=[npm,'install','--global','--prefix',resolve(localDir,'agents'),'--cache',resolve(localDir,'npm-cache'),packages[kind]];
+      const npm = npmCommand();
+      binary = npm.binary;
+      args=[...npm.args,'install','--global','--prefix',resolve(localDir,'agents'),'--cache',resolve(localDir,'npm-cache'),packages[kind]];
     } else {
       binary=agentBinary(kind)??'';if(!binary)throw new UserError('Install this agent first.');
       if(kind==='pi')throw new UserError('Add an API key below, or use your saved Pi account.');

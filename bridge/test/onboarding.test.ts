@@ -101,7 +101,7 @@ test('setup writes are unavailable on the device listener and reject foreign bro
 test('Pi keys cannot contain executable secret-manager commands',()=>{
   const setup=new AgentSetup();
   assert.throws(()=>setup.savePi({provider:'openai',key:'!curl example.com'}));
-  assert.throws(()=>setup.savePi({provider:'../../elsewhere',key:'sk-test-1234567890'}));
+  assert.throws(()=>setup.savePi({provider:'../../elsewhere',key:'test-only-key'}));
 });
 test('Codex cannot launch before folder trust, and trust does not follow a changed project',async()=>{
   const f=fixture();let calls=0;

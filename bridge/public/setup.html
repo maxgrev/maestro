@@ -24,6 +24,7 @@
         <h2>Connect your StopWatch</h2><p>Plug it into your Mac with a USB data cable. Keep it connected until setup finishes.</p>
         <label for="port">USB device</label><div class="field-row"><select id="port"><option value="">Looking for a device…</option></select><button id="scan" class="secondary">Refresh</button></div>
         <button id="inspect">Connect device</button><p id="device-state" class="check-result"></p>
+        <p id="firmware-missing" class="field-help" hidden>Firmware files are missing. For a source checkout, run <code>npm run firmware:build</code>, then refresh. If you downloaded the Mac app, reinstall it.</p>
         <div id="install-area" hidden><h3>Install Maestro</h3><p>Maestro saves a recovery copy first. Installation keeps your saved Wi-Fi and Muse pairing.</p><label class="checkbox"><input id="confirm-model" type="checkbox"> This USB device is an M5Stack StopWatch.</label><button id="install" class="secondary">Install on StopWatch</button></div>
         <div class="step-footer"><button id="device-next" disabled>Continue to Wi-Fi →</button></div>
       </section>

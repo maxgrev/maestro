@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        node: [24, 26]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan Git history
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 git --redact --no-banner --gitleaks-ignore-path /repo/.gitleaksignore /repo
+
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: bash scripts/bootstrap.sh --firmware-only
+      - name: Test USB helpers and every character renderer
+        run: .tools/python/bin/python -m unittest discover -s scripts/tests -v
+      - name: Export generic firmware
+        run: python3.13 scripts/package-firmware.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stopwatch-firmware
+          path: dist/Maestro-*-firmware.zip
+          if-no-files-found: error
+
+  mac:
+    needs: firmware
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: brew install lame
+      - uses: actions/download-artifact@v4
+        with:
+          name: stopwatch-firmware
+          path: .cache/firmware-artifact
+      - name: Restore the generic firmware artifact
+        run: |
+          mkdir -p firmware/build/sdk/esp32/build-maestro
+          unzip .cache/firmware-artifact/Maestro-*-firmware.zip -d firmware/build/sdk/esp32/build-maestro
+      - run: bash scripts/bootstrap.sh --bridge-only
+      - run: npm run check && npm test
+      - run: npm run app:build
+      - name: Test the relocated app and real local speech
+        run: python3.13 scripts/smoke-mac.py
+      - run: npm run release:source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maestro-apple-silicon
+          path: |
+            dist/Maestro-apple-silicon.zip
+            dist/Maestro-*-source.tar.gz
+            dist/Maestro-*-third-party-sources.zip
+            dist/SHA256SUMS
+          if-no-files-found: error

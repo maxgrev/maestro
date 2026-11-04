@@ -12,6 +12,8 @@ if (!existsSync(resolve(localDir, 'herdr/config.toml'))) {
 }
 const ips = Object.values(networkInterfaces()).flat().filter(a => a?.family === 'IPv4' && !a.internal).map(a => a!.address);
 const host = hostname().replace(/[^a-zA-Z0-9.-]/g, '');
+let lame: string | undefined;
+try { lame = execFileSync('/usr/bin/which', ['lame'], { encoding: 'utf8' }).trim() || undefined; } catch { /* doctor reports a missing encoder. */ }
 if (!existsSync(resolve(localDir, 'bridge-cert.pem'))) {
   const cnf = `[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=Maestro local bridge\n[ext]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\nsubjectAltName=DNS:localhost,DNS:${host || 'maestro.local'},IP:127.0.0.1${ips.map(ip => `,IP:${ip}`).join('')}\n`;
   writeFileSync(resolve(localDir, 'tls.cnf'), cnf, { mode: 0o600 });
@@ -26,7 +28,7 @@ if (!existsSync(resolve(localDir, 'config.json'))) {
     ...(existsSync(resolve('.tools/codex')) ? { codexBinary: resolve('.tools/codex') } : {}),
     speech: { whisper: resolve('.tools/whisper/bin/whisper-cli'), model: resolve('.tools/whisper/ggml-base.bin'), ffmpeg: 'ffmpeg', voice: 'Samantha',
       engine: 'kokoro', neuralVoice: 'af_heart', python: resolve('.tools/python/bin/python'), kokoro: resolve('.tools/kokoro'), helper: resolve('scripts/speech.py'),
-      ...(existsSync('/opt/homebrew/opt/lame/bin/lame') ? { lame: '/opt/homebrew/opt/lame/bin/lame' } : {}),
+      ...(lame ? { lame } : {}),
     },
   };
   writeFileSync(resolve(localDir, 'config.json'), JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });

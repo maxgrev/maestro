@@ -5,20 +5,23 @@ import json
 import subprocess
 import sys
 import struct
+import signal
+import tempfile
 from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
 import soxr
-from kokoro_onnx import Kokoro
+import espeakng_loader
+from kokoro_onnx import Kokoro, EspeakConfig
 
 
-async def main():
+async def main(espeak_data):
     model = Path(sys.argv[1])
     options = ort.SessionOptions()
     options.intra_op_num_threads = 4
     session = ort.InferenceSession(str(model / "model.onnx"), options, providers=["CPUExecutionProvider"])
-    engine = Kokoro.from_session(session, str(model / "voices.bin"))
+    engine = Kokoro.from_session(session, str(model / "voices.bin"), EspeakConfig(data_path=str(espeak_data)))
     if sys.argv[2] == "--persistent":
         # One JSON line per reply; bounded PCM frames and a zero-length terminator.
         # stdout contains only framed audio. A crash/closed pipe invalidates a turn.
@@ -59,7 +62,14 @@ async def main():
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except BrokenPipeError:
-        sys.exit(1)
+    # eSpeak 1.52 has a 160-byte data-path buffer. App Translocation and long
+    # install paths can exceed it, silently selecting the build machine's path.
+    # Pass a short *parent* directory: Phonemizer resolves the parent, while
+    # eSpeak follows its espeak-ng-data link without expanding the stored path.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    with tempfile.TemporaryDirectory(prefix="maestro-espeak-", dir="/tmp") as directory:
+        (Path(directory) / "espeak-ng-data").symlink_to(espeakng_loader.get_data_path(), target_is_directory=True)
+        try:
+            asyncio.run(main(Path(directory)))
+        except BrokenPipeError:
+            sys.exit(1)

@@ -1,6 +1,6 @@
 # Dot
 
-Maestro connects to your existing ChatGPT Dot through an OAuth-authenticated MCP plugin and [MCP Events](https://developers.openai.com/plugins/build/mcp-events). Dot appears separately from Codex in the agent picker, with a pale ring character, spoken replies, and saved inbox messages.
+Maestro connects to your existing ChatGPT Dot through an OAuth-authenticated MCP plugin and [MCP Events](https://developers.openai.com/plugins/build/mcp-events). Dot appears separately from Codex in the agent picker, with spoken replies and saved inbox messages.
 
 ## Connect
 
