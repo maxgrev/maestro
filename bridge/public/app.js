@@ -14,10 +14,12 @@ function choose(id) {
   selected = id; renderTargets();
   const target = targets.find(t=>t.id===id);
   $('watch-character').className='companion '+(target?.character||'codex');
-  $('watch-agent').textContent = target?.name || 'Maestro';
-  $('watch-caption').textContent = !target ? 'Select an agent to begin.' : target.available ? 'Hold to speak.\nRelease to send.' : 'Check this agent on your Mac before sending.';
+  $('watch-agent').textContent = target?.name || 'Select a conversation';
   $('recipient').textContent = target ? 'To '+target.name : 'Select a conversation';
   $('send').disabled = !target?.available || sending;
+  $('send').textContent = sending ? 'Sending…' : 'Send';
+  $('send-hint').textContent = !target ? '' : !target.available ? (target.status==='working'?'Conversation busy':'Conversation unavailable') : '⌘ Return';
+  $('send').title = target?.available ? 'Send message (⌘ Return)' : '';
   renderWatch();
 }
 function renderTargets() {
@@ -25,8 +27,8 @@ function renderTargets() {
   const focused=document.activeElement?.dataset.target;
   const list=$('agents'); list.replaceChildren();
   if(!targets.length) {
-    const note=el('div',undefined,'setup-note');
-    note.append(el('strong','No bridge conversations yet'),el('span','Start a Herdr session or connect a Grok Bot routine. Muse connects on the StopWatch.'));
+    const note=el('div',undefined,'empty-state'),link=el('a','Connect an agent');link.href='/setup.html#agents';
+    note.append(el('h3','No conversations'),link);
     list.append(note); return;
   }
   for(const target of targets) {
@@ -37,7 +39,7 @@ function renderTargets() {
     const meta=el('span',undefined,'agent-meta'); meta.append(el('span',target.name,'agent-name'),el('span',target.detail,'agent-detail'));
     row.append(meta,el('span',target.status==='new'?'New session':labels[target.status]||target.status,'agent-status'));
     const unread=unreadCounts.find(c=>c.target===target.id)?.unread;
-    if(unread)row.append(el('span',String(unread)+' unread','agent-status'));
+    if(unread)row.append(el('span',String(unread)+' unread','unread-mark'));
     row.addEventListener('click',()=>choose(target.id)); list.append(row);
   }
   if(focused) [...list.children].find(row=>row.dataset.target===focused)?.focus();
@@ -88,7 +90,7 @@ document.addEventListener('visibilitychange',()=>{
 function renderTurns() {
   const signature=JSON.stringify(turns); if(signature===lastTurns)return;lastTurns=signature;
   const list=$('activity');reads.disconnect();list.replaceChildren();$('activity-count').textContent=turns.length?String(turns.length):'';
-  if(!turns.length)list.append(el('p','Your requests and replies will appear here.','empty'));
+  if(!turns.length)list.append(el('p','No recent activity','empty'));
   for(const turn of turns) {
     const card=el('article',undefined,'turn'),head=el('div',undefined,'turn-heading');
     head.append(el('strong',turn.target.name),el('span',labels[turn.state]||turn.state,'state-'+turn.state));card.append(head);
@@ -103,14 +105,14 @@ function renderTurns() {
 function renderWatch() {
   const target=targets.find(t=>t.id===selected);
   const current=turns.find(t=>t.target.id===selected);
-  $('watch-state').textContent=(target&&!target.available?(labels[target.status]||target.status):current?(labels[current.state]||current.state):'READY').toUpperCase();
+  $('watch-state').textContent=(!target?'':!target.available?(labels[target.status]||target.status):current?(labels[current.state]||current.state):'Ready').toUpperCase();
 }
 async function refresh() {
   if(refreshBusy)return;refreshBusy=true;
   try {
     const [agents,activity,inbox]=await Promise.all([api('/api/targets'),api('/api/turns'),api('/api/inbox/status')]);
     unreadCounts=inbox.counts; const unread=unreadCounts.reduce((n,c)=>n+c.unread,0);
-    $('inbox-link').textContent=unread?'Inbox ('+unread+')':'Inbox';
+    $('inbox-label').textContent=unread?'Inbox ('+unread+')':'Inbox';
     targets=agents.targets;turns=activity.turns;
     if(followRequest&&selected===followRequest.target){
       const created=turns.find(t=>t.id===followRequest.id);
@@ -123,14 +125,14 @@ async function refresh() {
     if(selected) choose(selected);
     $('send').disabled=sending||!targets.find(t=>t.id===selected)?.available;
     $('warnings').replaceChildren(...agents.warnings.map(w=>el('p',w)));
-    renderTurns();renderWatch();$('connection').textContent='Bridge connected';
-  }catch(e){$('connection').textContent='Bridge offline';$('error').textContent=e.message;}
+    renderTurns();renderWatch();$('connection').textContent='Mac connected';
+  }catch(e){$('connection').textContent='Mac offline';$('error').textContent=e.message;}
   finally{refreshBusy=false;}
 }
 $('composer').addEventListener('submit',async event=>{
   event.preventDefault();if(sending||!selected)return;
   const text=$('message').value.trim();if(!text)return;
-  const target=selected,id=crypto.randomUUID();sending=true;$('send').disabled=true;$('error').textContent='';
+  const target=selected,id=crypto.randomUUID();sending=true;choose(selected);$('error').textContent='';
   followRequest=target.startsWith('new:')?{id,target}:null;
   try{
     await api('/api/turns',{method:'POST',body:JSON.stringify({id,target,text})});
@@ -140,7 +142,10 @@ $('composer').addEventListener('submit',async event=>{
     // A failed connection may hide a successful submission. Query the receipt, never replay.
     try{const receipt=await api('/api/turns/'+id);if(receipt){$('message').value='';await refresh();}}
     catch{$('error').textContent=e.message+' Delivery may be unclear. Check recent activity before sending again.';}
-  }finally{sending=false;$('send').disabled=!targets.find(t=>t.id===selected)?.available;}
+  }finally{sending=false;choose(selected);}
 });
 $('refresh').addEventListener('click',refresh);
+$('message').addEventListener('keydown',event=>{
+  if((event.metaKey||event.ctrlKey)&&event.key==='Enter'&&!$('send').disabled){event.preventDefault();$('composer').requestSubmit();}
+});
 void refresh();setInterval(refresh,3000);

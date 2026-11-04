@@ -2,39 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Maestro — Your agents, within reach</title>
-  <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/setup.css">
+  <title>Conversations | Maestro</title><script src="/appearance.js"></script>
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/characters.css"><link rel="stylesheet" href="/conversations.css">
 </head>
 <body>
-  <header><a class="brand" href="/">Maestro</a><a id="inbox-link" href="/inbox.html">Inbox</a><a href="/setup.html">Set up device &amp; agents</a><span id="connection" role="status">Connecting…</span></header>
-  <main>
-    <section class="device-column" aria-labelledby="title">
-      <div class="intro"><h1 id="title">Your agents, <br>within reach.</h1><p>Choose a conversation. Pick up where you left off.</p></div>
-      <div class="watch" aria-label="Conversation preview">
-        <div class="watch-face"><div class="watch-status" id="watch-state">READY</div>
-          <div class="watch-agent" id="watch-agent">Maestro</div>
-          <div class="companion codex" id="watch-character" aria-hidden="true"><i></i><i></i><b></b></div>
-          <p id="watch-caption">Tap an agent<br>to begin.</p><span class="watch-hint">HOLD TO TALK</span>
-        </div><div class="hardware-button" aria-hidden="true"></div>
-      </div>
-      <p class="device-note">On StopWatch: blue opens your agents.<br><span>Yellow chooses, then hold yellow to talk.<br>This preview follows the Mac conversation.</span></p>
-    </section>
-    <section class="workspace" aria-label="Agent conversations">
-      <div class="section-heading"><h2>Conversations</h2><button id="refresh" class="text-button">Refresh</button></div>
-      <div id="agents" class="agent-list"></div>
+  <header class="app-sidebar">
+    <a class="brand" href="/"><svg viewBox="0 0 28 32" fill="none" aria-hidden="true"><path d="M3 23V10l7 9 4-14 4 14 7-9v13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Maestro</a>
+
+    <nav class="app-nav" aria-label="Main navigation"><a href="/" data-nav="conversations" aria-current="page">Conversations<span class="nav-shortcut" aria-hidden="true">⌘1</span></a><a id="inbox-link" href="/inbox.html" data-nav="inbox"><span id="inbox-label">Inbox</span><span class="nav-shortcut" aria-hidden="true">⌘2</span></a><a href="/setup.html" data-nav="setup">Setup<span class="nav-shortcut" aria-hidden="true">⌘3</span></a></nav>
+    <div class="sidebar-footer"><span id="connection" class="bridge-status" role="status">Connecting…</span><div class="appearance-row"><label for="appearance">Appearance</label><select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div>
+  </header>
+  <main class="app-main">
+    <div class="page-heading"><h1 id="title">Conversations</h1></div>
+    <div class="conversation-layout">
+    <section class="conversation-primary" aria-label="Agent conversations">
+      <div class="section-heading"><h2>Agents &amp; sessions</h2><button id="refresh" class="text-button">Refresh</button></div>
+      <div id="agents" class="agent-list"><p class="empty">Loading conversations…</p></div>
       <div id="warnings" class="warnings" role="status"></div>
       <form id="composer">
-        <label for="message" id="recipient">Select a conversation</label>
-        <textarea id="message" rows="3" maxlength="8000" placeholder="What would you like to do?" required></textarea>
-        <div class="composer-footer"><span id="send-hint">Messages stay with the selected agent.</span><button type="submit" id="send" disabled>Send message <span aria-hidden="true">↗</span></button></div>
+        <div class="composer-core"><label for="message" id="recipient">Select a conversation</label>
+        <textarea id="message" rows="3" maxlength="8000" placeholder="Message" required></textarea>
+        <div class="composer-footer"><span id="send-hint"></span><button type="submit" id="send" disabled>Send</button></div></div>
       </form>
       <div class="section-heading activity-heading"><h2>Recent activity</h2><span id="activity-count"></span></div>
-      <div id="activity" aria-live="polite"><p class="empty">Your requests and replies will appear here.</p></div>
+      <div id="activity" aria-live="polite"><p class="empty">No recent activity</p></div>
       <p id="error" class="error" role="alert"></p>
     </section>
+    <aside class="conversation-device" aria-label="Conversation preview">
+      <h2>Conversation preview</h2>
+      <div class="watch" title="Previews the conversation selected on this Mac. The StopWatch keeps its own selection."><div class="watch-face"><div class="watch-status" id="watch-state"></div><div class="watch-agent" id="watch-agent">Select a conversation</div><div class="companion codex" id="watch-character" aria-hidden="true"></div></div></div>
+    </aside>
+    </div>
   </main>
-  <footer><span>Your Mac handles speech.</span><span>Maestro 0.2</span></footer>
+  <script type="module" src="/shell.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

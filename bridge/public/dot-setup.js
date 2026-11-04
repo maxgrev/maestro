@@ -7,9 +7,10 @@ async function refresh(){
   state=await api('/api/setup/dot');
   $('setup').hidden=!!ticket;$('consent').hidden=!ticket;
   if(ticket){await api('/api/setup/dot/authorization?ticket='+encodeURIComponent(ticket));$('status').textContent='ChatGPT is ready to connect.';return;}
-  $('status').textContent=state.connected?'Connected':state.linked?'One more step: ask your Dot to connect.':state.enabled?'Ready to connect in ChatGPT.':state.url?'Talk to your existing Dot from your StopWatch.':'Enable remote access in Setup → Wi-Fi first.';
+  $('status').textContent=state.connected?'Connected':state.linked?'Ask your Dot to connect.':state.enabled?'Connect Maestro in ChatGPT.':state.url?'':'Enable remote access first.';
   $('enable-form').hidden=state.enabled;$('instructions').hidden=!state.enabled||state.connected;$('connected').hidden=!state.connected;$('disconnect').hidden=!state.enabled;
   $('enable').disabled=!state.url;$('endpoint').value=state.url||'';$('instruction').value=state.instruction;
+  $('remote-required-link').hidden=!!state.url;
   if(!$('name').dataset.edited)$('name').value=state.name;
 }
 $('name').oninput=()=>{$('name').dataset.edited='true';};

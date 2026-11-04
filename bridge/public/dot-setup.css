@@ -1,1 +1,17 @@
-.dot-setup{display:block;max-width:720px;min-height:600px;padding:48px 28px}.dot-setup h1{font-size:36px;letter-spacing:-1px;margin:22px 0 12px}.dot-setup h2{font-size:22px}.dot-setup>p,.dot-setup li p{color:var(--muted)}.dot-setup ol{padding-left:22px}.dot-setup li{margin:30px 0}.dot-setup textarea{border:1px solid var(--line);padding:14px;font-size:14px;min-height:160px;margin:8px 0 12px}.dot-setup label{display:block;margin:18px 0 7px}.dot-setup #disconnect{display:block;margin-top:32px}.dot-setup #consent .text-button{margin-left:20px}.dot-setup .companion.dot{margin:0}.dot-setup .field-row input{min-width:0;font-size:13px}#enable-form{max-width:360px}#enable{margin-top:16px}[hidden]{display:none!important}
+.dot-setup { max-width: 1140px; }
+.dot-setup .page-heading { align-items: center; margin-top: 24px; }
+.dot-setup .page-heading .companion { margin: -10px 0; }
+.dot-setup>section { padding: 32px; background: var(--surface); border-radius: 22px; margin-top: 28px; }
+.dot-setup>p, .dot-setup li p, .dot-setup section>p { color: var(--muted); font-size: 14px; line-height: 1.75; }
+.dot-setup #status:empty { display: none; }
+.dot-setup ol { padding-left: 22px; }.dot-setup li { padding-left: 7px; margin-bottom: 32px; }.dot-setup li:last-child { margin-bottom: 0; }
+.dot-setup h2 { font-size: 24px; }
+.dot-setup textarea { font-size: 13px; min-height: 160px; margin: 8px 0 12px; }
+.dot-setup #disconnect { display: block; margin-top: 32px; color: var(--error); }
+.dot-setup #consent .text-button { margin-left: 20px; }
+.dot-setup .field-row input { font-size: 12px; }
+.dot-setup #enable-form { max-width: 400px; }.dot-setup #enable { margin-top: 18px; }
+.back-link { text-decoration: none; font-size: 12px; }.dot-setup .field-row { flex-wrap: wrap; }.dot-setup .field-row input { flex-basis: 240px; }
+.grok-guide #routine { font: 12px/1.8 ui-monospace, monospace; min-height: 300px; }
+.grok-guide #copy { margin-top: 14px; }.grok-guide #guide-status { margin: 14px 0 0; }
+@media (max-width: 700px) { .dot-setup>section { padding: 24px 20px; }.dot-setup .page-heading .companion { transform: scale(.7); margin-right: -12px; margin-left: -12px; }.dot-setup h1 { font-size: 27px; } }

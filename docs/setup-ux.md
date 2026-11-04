@@ -60,9 +60,22 @@ flash confirmation, reply isolation, folder trust, and failed-write handling.
 The renderer test checks every agent and mode against full redraws, including
 clipped display strips, with address and undefined-behavior sanitizers.
 
-Keep the existing dark pixel interface. Test changed setup states at desktop,
-tablet, and phone widths, with keyboard focus and reduced motion. The watch
-has one fixed display size and dark theme. Physical button feel, finger
+The Mac companion uses a shared sidebar for Conversations, Inbox, and Setup.
+Its graphite and sage palette follows the system appearance, with saved light
+and dark options. Native window chrome, readable forms, and the StopWatch's
+character art tie the screens together. Keep headings and action labels direct.
+Omit taglines, repeated subtitles, and explanatory footers. Put optional
+guidance in contextual disclosures, and credits in the native Help menu.
+Keep trust and account-consent details visible at the relevant action.
+Setup keeps the next action clear;
+firmware updates, network changes, and remote access use disclosures. A
+verified saved Wi-Fi network can continue without entering it again. Inbox
+search applies to loaded replies, and its unread filter preserves read state.
+
+Test changed setup states at desktop, tablet, and phone widths, with keyboard
+focus and reduced motion. Keep keyboard focus after saves and when returning
+from a reply. The watch retains its fixed display and dark pixel theme.
+Physical button feel, finger
 gestures, speaker quality, battery life, and a fresh second-Mac install need
 in-hand testing. Record those checks for each release rather than carrying
 old results forward as proof.

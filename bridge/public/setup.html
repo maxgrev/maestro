@@ -2,37 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Set up Maestro</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/setup.css">
+  <title>Setup | Maestro</title><script src="/appearance.js"></script><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/characters.css"><link rel="stylesheet" href="/setup.css">
 </head>
 <body>
-  <header><a class="brand" href="/">Maestro</a><a href="/">Conversations <span aria-hidden="true">↗</span></a></header>
-  <main class="setup-layout">
-    <aside class="setup-intro">
-      <p class="overline">M5Stack StopWatch</p><h1>Set up your StopWatch.</h1>
-      <p>Connect your StopWatch, join Wi-Fi, and choose who you want to talk to.</p>
-      <div class="control-guide" aria-label="StopWatch controls">
-        <div class="guide-face" aria-hidden="true"><span class="guide-agent">READY</span><svg class="guide-talk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><svg class="guide-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 5h3m3 0h12M3 12h3m3 0h12M3 19h3m3 0h12"/></svg><div class="companion codex"><i></i><i></i><b></b></div></div>
-        <div class="key blue"></div><div class="key yellow"></div>
-      </div>
-      <dl class="controls"><div><dt><span class="key-swatch yellow"></span>Yellow</dt><dd>Hold to talk. Select an item in menus. Page up when reading a reply.</dd></div><div><dt><span class="key-swatch blue"></span>Blue</dt><dd>Open agents. Move down in menus and replies. Hold for settings, or to go back.</dd></div><div><dt>Touch</dt><dd>Tap the list icon for agents. Swipe left for settings. Tap the reply text for the full answer, then scroll. Muted replies open automatically.</dd></div></dl>
-    </aside>
-    <section class="setup-workspace" aria-label="Guided setup">
-      <nav class="setup-steps" aria-label="Setup steps"><button data-step="device" aria-current="step">Device</button><button data-step="wifi">Wi-Fi</button><button data-step="agents">Agents</button><button data-step="ready">Try it</button></nav>
+  <header class="app-sidebar">
+    <a class="brand" href="/"><svg viewBox="0 0 28 32" fill="none" aria-hidden="true"><path d="M3 23V10l7 9 4-14 4 14 7-9v13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Maestro</a>
+
+    <nav class="app-nav" aria-label="Main navigation">
+      <a href="/" data-nav="conversations">Conversations<span class="nav-shortcut" aria-hidden="true">⌘1</span></a>
+      <a href="/inbox.html" data-nav="inbox">Inbox<span class="nav-shortcut" aria-hidden="true">⌘2</span></a>
+      <a href="/setup.html" data-nav="setup" aria-current="page">Setup<span class="nav-shortcut" aria-hidden="true">⌘3</span></a>
+    </nav>
+    <div class="sidebar-footer"><span id="connection" class="bridge-status" role="status">Connecting…</span><div class="appearance-row"><label for="appearance">Appearance</label><select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div>
+  </header>
+  <main class="app-main setup-main">
+    <div class="page-heading"><h1>StopWatch setup</h1></div>
+    <nav class="setup-steps" aria-label="Setup steps"><button data-step="device" aria-current="step"><span class="step-symbol" aria-hidden="true">↳</span>Device</button><button data-step="wifi"><span class="step-symbol" aria-hidden="true">⌁</span>Wi-Fi</button><button data-step="agents"><span class="step-symbol" aria-hidden="true">✳</span>Agents</button><button data-step="ready"><span class="step-symbol" aria-hidden="true">↗</span>Try it</button></nav>
+    <div class="setup-layout">
+      <aside class="setup-intro" aria-label="StopWatch control guide">
+        <div class="preview-tray"><div class="preview-core">
+          <div class="watch setup-watch" aria-hidden="true"><div class="watch-face"><div class="companion codex"></div></div></div>
+        </div></div>
+        <div class="device-summary"><div><strong id="preview-device-name">M5Stack StopWatch</strong><span id="preview-device-state">Not connected</span></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 3h6v8a3 3 0 0 1-6 0V3ZM9 7h6M12 14v7M9 21h6"/></svg></div>
+        <details class="controls-guide"><summary>StopWatch controls</summary><dl class="controls"><div><dt>Yellow</dt><dd>Hold to talk. Select an item in menus. Page up when reading a reply.</dd></div><div><dt>Blue</dt><dd>Open agents. Move down in menus and replies. Hold for settings, or to go back.</dd></div><div><dt>Touch</dt><dd>Tap the list icon for agents. Swipe left for settings. Tap reply text for the full answer, then scroll. Muted replies open automatically.</dd></div></dl></details>
+      </aside>
+      <section class="setup-workspace" aria-label="Guided setup" aria-busy="false">
       <div id="setup-message" class="setup-message" role="status" aria-live="polite"></div>
       <div id="setup-error" class="error" role="alert"></div>
       <section data-panel="device">
-        <h2>Connect your StopWatch</h2><p>Plug it into your Mac with a USB data cable. Keep it connected until setup finishes.</p>
+        <h2 tabindex="-1">Connect over USB</h2><p>Connect your StopWatch to this Mac with a USB data cable.</p>
         <label for="port">USB device</label><div class="field-row"><select id="port"><option value="">Looking for a device…</option></select><button id="scan" class="secondary">Refresh</button></div>
         <button id="inspect">Connect device</button><p id="device-state" class="check-result"></p>
+        <details id="usb-help" class="context-help"><summary>Connection tips</summary><p>If the StopWatch doesn’t appear, try another cable or USB port. Some cables only support charging.</p></details>
         <p id="firmware-missing" class="field-help" hidden>Firmware files are missing. For a source checkout, run <code>npm run firmware:build</code>, then refresh. If you downloaded the Mac app, reinstall it.</p>
-        <div id="install-area" hidden><h3>Install Maestro</h3><p>Maestro saves a recovery copy first. Installation keeps your saved Wi-Fi and Muse pairing.</p><label class="checkbox"><input id="confirm-model" type="checkbox"> This USB device is an M5Stack StopWatch.</label><button id="install" class="secondary">Install on StopWatch</button></div>
-        <div class="step-footer"><button id="device-next" disabled>Continue to Wi-Fi →</button></div>
+        <details id="install-area" class="install-disclosure" hidden><summary>Install or update Maestro</summary><p>Keep the cable connected. Maestro saves a recovery copy before installation and keeps your Wi-Fi and Muse pairing.</p><label class="checkbox"><input id="confirm-model" type="checkbox"> This USB device is an M5Stack StopWatch.</label><button id="install" class="secondary">Install on StopWatch</button></details>
+        <div class="step-footer"><button id="device-next" disabled>Continue to Wi-Fi</button></div>
       </section>
       <section data-panel="wifi" hidden>
-        <h2>Take your agents with you</h2><p>Join a 2.4 GHz Wi-Fi network or phone hotspot. Enable remote access below to reach your Mac from another network.</p>
-        <section class="remote-access" aria-labelledby="remote-heading">
-          <h3 id="remote-heading">Away from home</h3>
-          <p>Leave Maestro and Tailscale open on your Mac at home. Your StopWatch connects securely over the internet.</p>
+        <h2 tabindex="-1">Wi-Fi</h2>
+        <p id="wifi-state" class="check-result"></p><button id="keep-wifi" hidden>Use this network</button>
+        <details id="wifi-change" class="wifi-change" open><summary id="wifi-change-label">Choose a Wi-Fi network</summary><form id="wifi-form"><label for="ssid">Wi-Fi name</label><input id="ssid" required maxlength="32" autocomplete="off" placeholder="Network name (2.4 GHz)"><label for="wifi-password">Wi-Fi password</label><input id="wifi-password" type="password" maxlength="64" autocomplete="off" placeholder="Leave blank for an open network"><p class="field-help">Replaces the StopWatch’s saved network.</p><button id="wifi-submit">Connect Wi-Fi</button></form>
+        <details class="context-help"><summary>Wi-Fi tips</summary><p>Use a 2.4 GHz network. For an iPhone hotspot, turn on Maximize Compatibility. Changing networks requires USB.</p></details>
+        </details>
+        <details class="remote-access" aria-labelledby="remote-heading">
+          <summary id="remote-heading">Remote access</summary>
           <p id="remote-state" role="status">Checking remote access…</p>
           <div class="remote-actions">
             <a id="remote-install" href="https://tailscale.com/download/mac" target="_blank" rel="noreferrer" hidden>Get Tailscale ↗</a>
@@ -42,24 +55,20 @@
             <button id="remote-disable" class="text-button" hidden>Turn off</button>
           </div>
           <p id="remote-address" class="field-help" hidden></p>
-          <p class="field-help">Keep your Mac powered with its lid open. Maestro prevents idle sleep while it runs. Only a StopWatch with your device key can use the connection.</p>
-        </section>
-        <h3>Device Wi-Fi</h3>
-        <p id="wifi-state" class="check-result"></p><button id="keep-wifi" class="secondary" hidden>Use this network</button>
-        <form id="wifi-form"><label for="ssid">Wi-Fi name</label><input id="ssid" required maxlength="32" autocomplete="off"><label for="wifi-password">Wi-Fi password</label><input id="wifi-password" type="password" maxlength="64" autocomplete="off"><p class="field-help">Leave the password blank for an open network.</p><button>Connect Wi-Fi</button></form>
-        <p class="field-help">For an iPhone hotspot, turn on Maximize Compatibility. This replaces the device’s saved network; it reconnects when that network is available. New Wi-Fi details currently need USB.</p>
+          <details class="context-help"><summary>Remote access tips</summary><p>Keep Maestro and Tailscale running on this Mac, with power connected and the lid open. Only a StopWatch with your device key can connect.</p></details>
+        </details>
+        <button class="text-button" data-back="device">Back to device</button>
       </section>
       <section data-panel="agents" hidden>
-        <h2>Bring your agents</h2><p>Connect any you use. You can add more later.</p>
-        <details class="agent-setup"><summary><strong>Dot</strong><span>Your ChatGPT companion</span></summary><p>Talk to your existing Dot, with its memory and connected tools. Replies arrive on your StopWatch and in your inbox.</p><a class="button-link" href="/dot-setup.html">Connect your Dot →</a></details>
-        <details class="agent-setup" open><summary><strong>Muse</strong><span id="muse-state">Checking…</span></summary><p>Muse connects through its phone app. Your existing device pairing stays in place.</p><form id="muse-form"><label for="muse-token">Muse SDK token</label><input id="muse-token" type="password" placeholder="mgst_…" autocomplete="off" required><p class="field-help"><a href="https://gadgets.muse.ai/" target="_blank" rel="noreferrer">Get a token from Muse ↗</a></p><button class="secondary">Save token</button></form><p>In Muse on your phone: enable Developer mode, open Devices, then add <strong id="muse-device">your StopWatch</strong>. Confirm on the yellow button when asked.</p><button id="check-pair" class="text-button">Check pairing</button></details>
-        <details class="agent-setup"><summary><strong>Grok Bot</strong><span id="grok-state">Checking…</span></summary><p>Use a Grok Bot routine with a webhook. Maestro sends your message to that routine and receives its reply through your Mac.</p><p><a href="/grok-setup.html" target="_blank">Open the routine guide ↗</a></p><form id="grok-form"><label for="grok-url">Webhook URL</label><input id="grok-url" type="url" required autocomplete="off" placeholder="https://…"><label for="grok-key">Webhook key</label><input id="grok-key" type="password" required autocomplete="off"><button class="secondary">Save Grok Bot</button></form></details>
+        <h2 tabindex="-1">Agents</h2>
+        <details class="agent-setup"><summary><span class="agent-portrait companion dot" aria-hidden="true"></span><strong>Dot</strong><span>ChatGPT</span></summary><a class="button-link" href="/dot-setup.html">Connect Dot</a></details>
+        <details class="agent-setup"><summary><span class="agent-portrait companion muse" aria-hidden="true"></span><strong>Muse</strong><span id="muse-state">Checking…</span></summary><form id="muse-form"><label for="muse-token">Muse SDK token</label><input id="muse-token" type="password" placeholder="mgst_…" autocomplete="off" required><p class="field-help"><a href="https://gadgets.muse.ai/" target="_blank" rel="noreferrer">Get a Muse token ↗</a></p><button class="secondary">Save token</button></form><p>In the Muse phone app, enable Developer mode. Open Devices and add <strong id="muse-device">your StopWatch</strong>. Press yellow to confirm when asked.</p><button id="check-pair" class="text-button">Check pairing</button></details>
+        <details class="agent-setup"><summary><span class="agent-portrait companion grok" aria-hidden="true"></span><strong>Grok Bot</strong><span id="grok-state">Checking…</span></summary><p><a href="/grok-setup.html" target="_blank">Setup guide ↗</a></p><form id="grok-form"><label for="grok-url">Webhook URL</label><input id="grok-url" type="url" required autocomplete="off" placeholder="https://…"><label for="grok-key">Webhook key</label><input id="grok-key" type="password" required autocomplete="off"><button class="secondary">Save Grok Bot</button></form></details>
         <details class="agent-setup">
-          <summary><strong>Codex, Claude Code &amp; Pi</strong><span id="coding-state">Checking…</span></summary>
-          <p>Maestro uses Herdr to open new sessions and return to sessions it manages. Install the agents you want here, then sign in with their provider.</p>
+          <summary><span class="agent-portrait companion codex" aria-hidden="true"></span><strong>Codex, Claude Code &amp; Pi</strong><span id="coding-state">Checking…</span></summary>
           <ul id="coding-agents" class="plain-list"></ul>
           <div id="agent-progress" hidden><p id="agent-message" role="status"></p><a id="agent-login" target="_blank" rel="noreferrer" hidden>Open sign-in ↗</a><p id="agent-code"></p><button id="agent-cancel" class="secondary">Cancel</button></div>
-          <details><summary>Use an API key with Pi</summary><p>Pi can also use its saved account. This form saves a key in Pi’s private account file. Provider API usage may incur charges.</p><form id="pi-form"><label for="pi-provider">Provider</label><select id="pi-provider"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select><label for="pi-key">API key</label><input id="pi-key" type="password" required autocomplete="off"><button class="secondary">Save Pi key</button></form></details>
+          <details><summary>Use an API key with Pi</summary><p>Use a provider API key instead of signing in. API usage may incur charges.</p><form id="pi-form"><label for="pi-provider">Provider</label><select id="pi-provider"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select><label for="pi-key">API key</label><input id="pi-key" type="password" required autocomplete="off"><button class="secondary">Save Pi key</button></form></details>
           <form id="project-form">
             <label for="project-name">Project name</label><input id="project-name" required maxlength="60">
             <label for="project-path">Project folder</label><div class="field-row"><input id="project-path" required placeholder="/Users/you/Projects/my-project"><button id="choose-folder" type="button" class="secondary" hidden>Choose…</button></div>
@@ -67,21 +76,21 @@
             <p class="field-help">Codex can read, edit, and run files here under its usual permission settings. Folder settings can run code on startup. Trust only folders you know.</p>
             <button class="secondary">Save project</button>
           </form>
-          <p class="field-help">Claude Code, Codex, and Pi return their full reply here and speak on your StopWatch. Existing chats outside Maestro’s Herdr session stay in their own apps.</p>
         </details>
-        <details class="agent-setup"><summary><strong>Voice</strong><span id="voice-state">Local speech</span></summary>
-          <p>Natural voices run on your Mac with Kokoro. No account, key, or cloud speech service needed. Muse keeps the voice supplied by its agent when one is available.</p>
+        <details class="agent-setup voice-setup"><summary><svg class="voice-mark" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 13v6M10 8v16M16 4v24M22 10v12M28 14v4"/></svg><strong>Reply voice</strong><span id="voice-state">Local speech</span></summary>
           <form id="voice-form"><label for="voice">Reply voice</label><select id="voice"></select><div class="field-row"><button type="button" id="voice-preview" class="secondary">Preview voice</button><button>Save voice</button></div></form>
           <audio id="voice-audio" controls hidden></audio><p id="voice-message" role="status"></p>
+          <details class="context-help"><summary>Voice details</summary><p>Speech runs on this Mac. Muse uses its agent’s voice when available.</p></details>
         </details>
-        <div class="step-footer"><button id="sync-device">Save to StopWatch →</button><p id="connection-save-help" class="field-help">Saves the Mac connection and Muse token, then restarts your device.</p></div>
+        <div class="step-footer"><button class="text-button" data-back="wifi">Back to Wi-Fi</button><button id="sync-device" title="Saves the Mac connection and Muse token to the StopWatch.">Save and restart</button></div>
       </section>
       <section data-panel="ready" hidden>
-        <h2>Meet your agents</h2><p id="ready-description">Check the device connection, then press blue to see your agents.</p><div id="ready-checks" class="ready-checks"></div><button id="verify">Check connection</button><button id="open-agents" class="secondary" disabled>Show agents on StopWatch</button>
-        <p class="try-prompt">Choose an agent with yellow. Hold yellow and say “Hello.” Release to send.</p><p>Keep Maestro open on your Mac for Grok Bot, coding agents, and spoken replies. Muse also needs its own account connection.</p><a class="button-link" href="/">Open conversations →</a>
+        <h2 tabindex="-1">Test connection</h2><div id="ready-checks" class="ready-checks"></div><div class="ready-actions"><button id="verify">Check connection</button><button id="open-agents" class="secondary" disabled>Show agents on StopWatch</button></div>
+        <p class="try-prompt">Choose an agent with yellow. Hold yellow to talk, then release to send.</p><details class="context-help"><summary>Keeping Maestro running</summary><p>Leave Maestro open on your Mac for coding agents, Grok Bot, and local speech. Closing its window keeps it running in the menu bar.</p></details><a class="button-link" href="/">Open conversations</a>
       </section>
-    </section>
+      </section>
+    </div>
   </main>
-  <footer><span>Your Mac handles speech. Account keys stay in private local storage.</span><a href="/characters/credits.html">Character &amp; voice credits</a></footer>
+  <script type="module" src="/shell.js"></script>
   <script type="module" src="/setup.js"></script>
 </body></html>

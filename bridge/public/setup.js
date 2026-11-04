@@ -1,18 +1,38 @@
 const $ = id => document.getElementById(id);
-let state, remoteState, busy = false, port = '', lastPorts = '';
+let state, remoteState, busy = false, port = '', lastPorts = '', lastWifi = '';
 async function api(path, body) {
   const response = await fetch(path, body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {});
   const value = await response.json(); if(!response.ok) throw new Error(value.error || 'Could not complete this step.'); return value;
 }
-function show(step) {
+function show(step, focus = true) {
+  if(!['device','wifi','agents','ready'].includes(step))return;
   document.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==step);
   document.querySelectorAll('[data-step]').forEach(b=>b.dataset.step===step?b.setAttribute('aria-current','step'):b.removeAttribute('aria-current'));
   $('setup-error').textContent='';
+  if(!busy)$('setup-message').textContent='';
+  history.replaceState(null,'','#'+step);
+  const panel=document.querySelector(`[data-panel="${step}"]`);
+  if(focus){panel.querySelector('h2')?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'auto'});}
+  if(focus&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    const animations=panel.getAnimations(),style=getComputedStyle(panel);
+    const start=animations.length?{transform:style.transform,opacity:style.opacity}:{transform:'translateY(5px)',opacity:.85};
+    animations.forEach(animation=>animation.cancel());
+    panel.animate([start,{transform:'translateY(0)',opacity:1}],{duration:220,easing:'cubic-bezier(.22,.8,.24,1)'});
+  }
   if(step==='wifi')void checkRemote();
 }
-function lock(on) { busy=on; document.querySelectorAll('button,input,select').forEach(e=>e.disabled=on); if(!on) render(); }
+function lock(on) {
+  busy=on;
+  document.querySelector('.setup-workspace').setAttribute('aria-busy',String(on));
+  document.querySelectorAll('.setup-workspace button,.setup-workspace input,.setup-workspace select').forEach(e=>e.disabled=on);
+  if(!on)render();
+}
 function render() {
-  if(!state)return;
+  if(!state){
+    for(const id of ['port','inspect','install','device-next','sync-device','verify','open-agents','check-pair','wifi-submit'])$(id).disabled=true;
+    document.querySelectorAll('#voice-form button').forEach(button=>button.disabled=true);
+    return;
+  }
   const signature=JSON.stringify(state.ports);
   if(signature!==lastPorts){
     lastPorts=signature; $('port').replaceChildren();
@@ -22,16 +42,27 @@ function render() {
     else if(state.ports.length===1){port=state.ports[0].port;$('port').value=port;}
   }
   const d=state.device?.port===port ? state.device : null;
-  $('device-state').textContent=d?'StopWatch found. '+(d.maestro.version>=2?'Maestro is installed.':'A firmware update is needed.'):'Connect to check your device.';
-  $('device-state').classList.toggle('check-result',!!d&&d.maestro.version>=2);
+  $('port').disabled=busy||!state.ports.length;
+  $('device-state').textContent=d?(d.maestro.version>=2?'Maestro installed':'Firmware update required'):'';
+  $('device-state').classList.toggle('verified',!!d&&d.maestro.version>=2);
+  $('usb-help').hidden=!!port;
+  $('preview-device-name').textContent=d?.name||'M5Stack StopWatch';
+  $('preview-device-state').textContent=d?'USB connected':port?'Not checked':'Not connected';
+  document.querySelector('[data-step="device"]').dataset.complete=String(!!d&&d.maestro.version>=2);
+  document.querySelector('[data-step="wifi"]').dataset.complete=String(d?.wifi.state==='connected');
   $('device-next').disabled=busy||!d||d.maestro.version<2;
+  $('wifi-submit').disabled=busy||!d||d.maestro.version<2;
   $('install-area').hidden=!port||!state.firmware;
   $('firmware-missing').hidden=state.firmware;
   $('install').disabled=busy||!$('confirm-model').checked;
   $('inspect').disabled=busy||!port;
-  $('wifi-state').textContent=d?.wifi.state==='connected'?'Connected to '+d.wifi.ssid: 'Wi-Fi has not been checked yet.';
-  $('wifi-state').classList.toggle('check-result',d?.wifi.state==='connected');
+  $('wifi-state').textContent=d?.wifi.state==='connected'?'Connected to '+d.wifi.ssid:d?'Not connected':'Connect over USB to check Wi-Fi.';
+  $('wifi-state').classList.toggle('verified',d?.wifi.state==='connected');
   $('keep-wifi').hidden=d?.wifi.state!=='connected';
+  const wifiSignature=JSON.stringify([port,d?.wifi.state,d?.wifi.ssid]);
+  if(wifiSignature!==lastWifi){lastWifi=wifiSignature;$('wifi-change').open=d?.wifi.state!=='connected';}
+  $('wifi-change-label').textContent=d?.wifi.state==='connected'?'Change network':'Choose a Wi-Fi network';
+  $('wifi-submit').classList.toggle('secondary',d?.wifi.state==='connected');
   $('muse-state').textContent=d?.link.paired?'Paired':state.muse?'Token saved':'Add token';
   $('muse-device').textContent=d?.name||'your StopWatch';
   $('muse-form').querySelector('button').textContent=state.muse?'Replace token':'Save token';
@@ -40,7 +71,7 @@ function render() {
   if(!$('voice').dataset.edited)$('voice').value=state.voice;
   $('voice-state').textContent=(state.voices||[]).find(v=>v.id===state.voice)?.name||'Local speech';
   $('sync-device').disabled=busy||!d||d.maestro.version<2;
-  $('connection-save-help').textContent=state.remote?'Saves the remote connection and Muse token, then restarts your device.':'Saves the home connection and Muse token, then restarts your device.';
+  $('sync-device').title=state.remote?'Saves the remote connection and Muse token to the StopWatch.':'Saves the local connection and Muse token to the StopWatch.';
   $('check-pair').disabled=busy||!port;
   $('verify').disabled=busy||!port;
   $('open-agents').disabled=busy||!d?.maestro.bridge;
@@ -70,8 +101,25 @@ for(const action of ['enable','disable'])$('remote-'+action).onclick=()=>run(asy
   $('remote-state').textContent=action==='enable'?'Checking the secure connection…':'Turning off remote access…';
   remoteState=await api('/api/setup/remote',{action});await refresh();renderRemote();
 });
-async function refresh(){state=await api('/api/setup');render();}
-async function run(fn){if(busy)return;lock(true);$('setup-error').textContent='';try{await fn();}catch(e){$('setup-error').textContent=e.message;}finally{lock(false);}}
+async function refresh(){
+  try{state=await api('/api/setup');render();}
+  catch(error){
+    if(!state){$('port').replaceChildren(new Option('Could not check USB devices',''));$('device-state').textContent='Refresh to try again.';$('usb-help').hidden=true;}
+    throw error;
+  }
+}
+async function run(fn,errorId='setup-error'){
+  if(busy)return;
+  const focused=document.activeElement;
+  const errorNode=$(errorId);
+  lock(true);$('setup-error').textContent='';errorNode.textContent='';
+  if(errorId!=='setup-error')errorNode.classList.remove('error');
+  try{await fn();}catch(e){errorNode.textContent=e.message;errorNode.classList.add('error');errorNode.scrollIntoView({block:'nearest'});}
+  finally{
+    lock(false);
+    if(document.activeElement===document.body&&focused?.isConnected&&!focused.disabled&&focused.getClientRects().length)focused.focus({preventScroll:true});
+  }
+}
 async function operation(action,fields={}){
   if(!port)throw new Error('Connect and choose your StopWatch first.');
   const job=await api('/api/setup/device',{action,port,...fields});
@@ -86,6 +134,7 @@ async function operation(action,fields={}){
   }
 }
 document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>show(b.dataset.step));
+document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>show(b.dataset.back));
 $('port').onchange=()=>{port=$('port').value;render();};
 $('confirm-model').onchange=render;
 $('scan').onclick=()=>run(refresh);
@@ -94,20 +143,20 @@ $('install').onclick=()=>run(async()=>{await operation('install',{confirmStopWat
 $('device-next').onclick=()=>show('wifi');
 $('keep-wifi').onclick=()=>show('agents');
 $('wifi-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await operation('wifi',{ssid:$('ssid').value,password:$('wifi-password').value});$('wifi-password').value='';show('agents');});};
-$('muse-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{muse:$('muse-token').value.trim()});$('muse-token').value='';await refresh();$('setup-message').textContent='Muse token saved. Choose Save to StopWatch below to apply it.';});};
-$('grok-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{grok:{webhook:$('grok-url').value.trim(),key:$('grok-key').value.trim()}});$('grok-key').value='';$('grok-url').value='';await refresh();$('setup-message').textContent='Grok routine saved. Send a short message from Conversations to check its reply.';});};
-$('project-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{project:{name:$('project-name').value.trim(),path:$('project-path').value.trim(),trusted:$('project-trusted').checked}});await refresh();$('setup-message').textContent='Project saved. New coding sessions will use this folder.';});};
+$('muse-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{muse:$('muse-token').value.trim()});$('muse-token').value='';await refresh();$('setup-message').textContent='Muse token saved. Choose Save and restart to apply it.';});};
+$('grok-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{grok:{webhook:$('grok-url').value.trim(),key:$('grok-key').value.trim()}});$('grok-key').value='';$('grok-url').value='';await refresh();$('setup-message').textContent='Grok Bot saved.';});};
+$('project-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{project:{name:$('project-name').value.trim(),path:$('project-path').value.trim(),trusted:$('project-trusted').checked}});await refresh();$('setup-message').textContent='Project saved.';});};
 $('project-path').oninput=()=>{$('project-trusted').checked=false;};
 $('voice').onchange=()=>{$('voice').dataset.edited='true';};
-$('voice-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{voice:$('voice').value});delete $('voice').dataset.edited;await refresh();$('voice-message').textContent='Saved. Your next reply will use this voice.';});};
+$('voice-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{voice:$('voice').value});delete $('voice').dataset.edited;await refresh();$('voice-message').textContent='Voice saved.';},'voice-message');};
 let previewUrl;
 $('voice-preview').onclick=()=>run(async()=>{
   const audio=$('voice-audio');audio.pause();$('voice-message').textContent='Preparing voice…';
-  const response=await fetch('/api/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Hello, I’m Maestro. Pick your agent, hold the yellow button, and tell me what you need.',format:'mp3',voice:$('voice').value})});
+  const response=await fetch('/api/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'This is a preview of the selected voice.',format:'mp3',voice:$('voice').value})});
   if(!response.ok)throw new Error('Voice preview is unavailable. Please try again.');
   const blob=await response.blob();if(previewUrl)URL.revokeObjectURL(previewUrl);
   previewUrl=URL.createObjectURL(blob);audio.src=previewUrl;audio.hidden=false;await audio.play();$('voice-message').textContent='Previewing '+$('voice').selectedOptions[0].textContent;
-});
+},'voice-message');
 $('check-pair').onclick=()=>run(async()=>{await operation('inspect');$('setup-message').textContent=state.device?.link.paired?'Muse is paired.':'Pair your StopWatch in the Muse phone app, then check again.';});
 $('sync-device').onclick=()=>run(async()=>{await operation('configure');show('ready');$('setup-message').textContent='Saved. Waiting for Wi-Fi and the Mac connection…';await new Promise(r=>setTimeout(r,15000));await operation('inspect');});
 $('verify').onclick=()=>run(async()=>{await operation('inspect');});
@@ -130,8 +179,10 @@ $('pi-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/
 async function coding(){try{
   const data=await api('/api/setup/coding');const names={codex:'Codex',claude:'Claude Code',pi:'Pi'};let count=0;$('coding-agents').replaceChildren();
   for(const agent of data.agents){const row=document.createElement('li'),label=document.createElement('span');label.textContent=names[agent.kind]+': '+(!agent.installed?'Not installed':agent.signedIn?(agent.kind==='pi'?'Saved account':'Signed in'):'Sign in needed');row.append(label);if(agent.installed)count++;
-    if(!agent.installed||agent.kind!=='pi'){const b=document.createElement('button');b.className='secondary';b.textContent=agent.installed?'Sign in':'Install';b.onclick=()=>setupAgent(agent.kind,agent.installed?'login':'install');row.append(b);}
+    if(!agent.installed||agent.kind!=='pi'){const b=document.createElement('button');b.className='secondary';b.textContent=agent.installed?'Sign in':'Install';b.disabled=busy;b.setAttribute('aria-label',(agent.installed?'Sign in to ':'Install ')+names[agent.kind]);b.onclick=()=>setupAgent(agent.kind,agent.installed?'login':'install');row.append(b);}
     $('coding-agents').append(row);
   }$('coding-state').textContent=count+' installed';codingJob(data.job);
 }catch{$('coding-state').textContent='Could not check';}}
-void run(async()=>{await refresh();if(state.job?.state==='working')$('setup-message').textContent='A device step is already running. Wait, then refresh to check it.';await coding();});
+show(location.hash.slice(1)||'device',false);
+void run(async()=>{await refresh();if(state.job?.state==='working')$('setup-message').textContent='A device step is already running. Wait, then refresh to check it.';});
+void coding();

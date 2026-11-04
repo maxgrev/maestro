@@ -1,9 +1,14 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect your Dot — Maestro</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/setup.css"><link rel="stylesheet" href="/dot-setup.css"></head>
-<body><header><a class="brand" href="/">Maestro</a><a href="/setup.html">Setup</a></header>
-<main class="dot-setup">
-  <div class="companion dot" aria-hidden="true"><i></i></div><h1>Bring your Dot along.</h1>
-  <p id="status" role="status">Checking your connection…</p><p id="error" class="error" role="alert"></p>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect your Dot | Maestro</title><script src="/appearance.js"></script><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/characters.css"><link rel="stylesheet" href="/dot-setup.css"></head>
+<body><header class="app-sidebar">
+  <a class="brand" href="/"><svg viewBox="0 0 28 32" fill="none" aria-hidden="true"><path d="M3 23V10l7 9 4-14 4 14 7-9v13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Maestro</a>
+  <nav class="app-nav" aria-label="Main navigation"><a href="/" data-nav="conversations">Conversations<span class="nav-shortcut" aria-hidden="true">⌘1</span></a><a href="/inbox.html" data-nav="inbox">Inbox<span class="nav-shortcut" aria-hidden="true">⌘2</span></a><a href="/setup.html" data-nav="setup" aria-current="page">Setup<span class="nav-shortcut" aria-hidden="true">⌘3</span></a></nav>
+  <div class="sidebar-footer"><span id="connection" class="bridge-status" role="status">Connecting…</span><div class="appearance-row"><label for="appearance">Appearance</label><select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div>
+</header>
+<main class="app-main dot-setup">
+  <a class="text-button back-link" href="/setup.html#agents">← Agents</a>
+  <div class="page-heading"><h1>Connect Dot</h1><div class="companion dot" aria-hidden="true"></div></div>
+  <p id="status" role="status">Checking your connection…</p><a id="remote-required-link" class="text-button" href="/setup.html#wifi" hidden>Set up remote access</a><p id="error" class="error" role="alert"></p>
   <section id="consent" hidden>
     <h2>Connect ChatGPT to Maestro?</h2><p>Your Dot will receive messages you address to it on Maestro and can send replies and updates to your watch. Other agents’ conversations stay private.</p>
     <button id="approve">Connect my Dot</button><a class="text-button" href="/dot-setup.html">Cancel</a>
@@ -16,7 +21,7 @@
         <li><strong>Connect your existing Dot.</strong><p>Once the plugin is connected, paste this into your Dot’s conversation.</p><textarea id="instruction" rows="5" readonly></textarea><button id="copy-instruction" class="secondary">Copy message for Dot</button></li>
       </ol>
     </div>
-    <div id="connected" hidden><p>Your Dot is ready in the agent picker. Hold yellow to talk; replies also stay in your inbox.</p><a href="/">Open conversations →</a></div>
+    <div id="connected" hidden><a href="/">Open conversations</a></div>
     <button id="disconnect" class="text-button" hidden>Disconnect Dot</button>
   </section>
-</main><footer>Keep Maestro and Tailscale running on this Mac.</footer><script type="module" src="/dot-setup.js"></script></body></html>
+</main><script type="module" src="/shell.js"></script><script type="module" src="/dot-setup.js"></script></body></html>
