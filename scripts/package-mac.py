@@ -14,6 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "dist/Maestro.app"
 RES = APP / "Contents/Resources"
+LAME_VERSION = "3.100"
+LAME_SHA256 = "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
 
 
 def run(*args):
@@ -36,6 +38,26 @@ def copytree(src, dst):
     shutil.copytree(src, dst, dirs_exist_ok=True, symlinks=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"))
 
 
+def build_lame():
+    # Homebrew's encoder can link to libraries outside the app. Build the
+    # pinned encoder without its optional decoder so the app is relocatable.
+    archive = download(
+        f"https://downloads.sourceforge.net/project/lame/lame/{LAME_VERSION}/lame-{LAME_VERSION}.tar.gz",
+        f"third-party/lame-{LAME_VERSION}.tar.gz", LAME_SHA256)
+    source = ROOT / ".cache" / f"lame-{LAME_VERSION}"
+    if not source.exists():
+        with tarfile.open(archive) as tar:
+            tar.extractall(ROOT / ".cache", filter="data")
+    build = ROOT / ".cache" / f"lame-{LAME_VERSION}-build"
+    build.mkdir(exist_ok=True)
+    env = {**os.environ, "MACOSX_DEPLOYMENT_TARGET": "14.0"}
+    subprocess.run([str(source / "configure"), "--disable-shared", "--enable-static",
+                    "--disable-decoder", "--without-libiconv-prefix"],
+                   cwd=build, env=env, check=True)
+    subprocess.run(["make", "-j4"], cwd=build, env=env, check=True)
+    return build / "frontend/lame"
+
+
 def main():
     if os.uname().machine != "arm64" or os.uname().sysname != "Darwin":
         raise SystemExit("This package targets Apple Silicon Macs.")
@@ -43,9 +65,7 @@ def main():
     run(sys.executable, "scripts/fetch-voices.py")
     run(sys.executable, "scripts/firmware-manifest.py")
     version = json.loads((ROOT / "package.json").read_text())["version"]
-    lame = shutil.which("lame")
-    if not lame:
-        raise SystemExit("LAME is missing. Install it with brew install lame.")
+    lame = build_lame()
     node = download("https://nodejs.org/dist/v26.7.0/node-v26.7.0-darwin-arm64.tar.gz", "node-portable.tar.gz", "7ee659a7768e641bbfd5360940660b8e8fd0052f77488f365562bac522fc15d4")
     python = download("https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.13.16%2B20261009-aarch64-apple-darwin-install_only_stripped.tar.gz", "python-portable.tar.gz", "11785155d0f70e634178219c20925d8f20be00a3da4684fc4f5019dd15602ef7")
     # Only replace generated output, never the running app's data directory.

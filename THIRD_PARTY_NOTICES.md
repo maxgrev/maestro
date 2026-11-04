@@ -17,7 +17,7 @@ as your own brand.
 | Phonemizer | 3.4.0 | GPL-3.0-or-later. Source and license accompany the Mac package. |
 | eSpeak NG | 1.52.0, through espeakng-loader 0.2.4 | [GPL-3.0-or-later](https://github.com/espeak-ng/espeak-ng/tree/1.52.0). Source, build recipe, and license accompany the Mac package. |
 | python-soxr / libsoxr | 1.0.0 / bundled upstream | LGPL-2.1-or-later; bundled third-party terms remain in the Python package. Source accompanies the Mac package. |
-| LAME | 3.100 or 4.0, recorded in the source manifest | [LGPL-2.0-or-later](https://lame.sourceforge.io/license.txt). Matching source and build instructions accompany the Mac package. |
+| LAME | 3.100, built from checksum-pinned source | [LGPL-2.0-or-later](https://lame.sourceforge.io/license.txt). Matching source and build instructions accompany the Mac package. |
 | ONNX Runtime | 1.31.0 | MIT; its license and ThirdPartyNotices.txt remain in the Python runtime. |
 | Node.js and Python | pinned by `scripts/package-mac.py` | License texts remain in their runtime distributions. |
 | JavaScript dependencies | `package-lock.json` | Each package retains its license/README in `node_modules`. The Claude Agent SDK uses Anthropic's stated terms; it is not relicensed under Maestro's MIT license. |

@@ -34,11 +34,10 @@ def main():
     sources.append(download(
         "https://codeload.github.com/espeak-ng/espeak-ng/tar.gz/refs/tags/1.52.0",
         "espeak-ng-1.52.0.tar.gz", "bb4338102ff3b49a81423da8a1a158b420124b055b60fa76cfb4b18677130a23"))
-    lame = subprocess.check_output(["lame", "--version"], text=True)
+    lame = subprocess.check_output([str(notices.parent / ".tools/lame"), "--version"], text=True)
     match = re.search(r"version\s+(\d+\.\d+(?:\.\d+)?)", lame)
     checksums = {
         "3.100": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e",
-        "4.0": "3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb",
     }
     if not match or match[1] not in checksums:
         raise ValueError("LAME source pin needs updating for this installed encoder.")
@@ -76,7 +75,8 @@ def main():
         "-DCOMPILE_INTONATIONS=OFF -DCMAKE_BUILD_TYPE=Release; cmake --build build; cmake --install build.\n"
         "espeakng-loader supplies this library and data to Phonemizer. Its source archive includes its packaging code.\n"
         "Phonemizer and python-soxr: unpack their source archives, then python3.13 -m pip install .\n"
-        f"LAME {lame_version}: ./configure --disable-shared --enable-static; make; make install. "
+        f"LAME {lame_version}: export MACOSX_DEPLOYMENT_TARGET=14.0; ./configure --disable-shared --enable-static "
+        "--disable-decoder --without-libiconv-prefix; make. "
         "The packaged command links only macOS system libraries.\n"
         "Maestro's scripts/speech.py and desktop/requirements-speech.txt are in the matching Maestro source archive.\n"
         "To use a modified library, replace it in the app's Python site-packages, then apply a local ad hoc signature "
