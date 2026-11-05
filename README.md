@@ -31,7 +31,8 @@ Run it again to resume an interrupted download or build.
 Maestro supports Node 24 and 26. Python 3.13, Git, Clang, and LAME must be on
 `PATH`.
 
-To use the native Mac app after bootstrap:
+To build the native Mac app after bootstrap, install Xcode 26 or later,
+then run:
 
 ```sh
 npm run app:build

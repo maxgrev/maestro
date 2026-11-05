@@ -1,0 +1,18 @@
+{
+  "fill": { "solid": "srgb:0.10588,0.11765,0.10196,1.00000" },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "AppIcon.png",
+          "name": "Maestro remote",
+          "position": { "scale": 1.2, "translation-in-points": [0, 0] }
+        }
+      ],
+      "shadow": { "kind": "neutral", "opacity": 0 },
+      "specular": false,
+      "translucency": { "enabled": false, "value": 0 }
+    }
+  ],
+  "supported-platforms": { "squares": ["macOS"] }
+}

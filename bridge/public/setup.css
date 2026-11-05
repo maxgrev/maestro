@@ -9,7 +9,8 @@
 .setup-intro { position: sticky; top: 32px; min-width: 0; }
 .preview-tray { padding: 5px; background: var(--surface-inset); border-radius: 27px; }
 .preview-core { padding: 25px 14px 23px; background: var(--surface-raised); border-radius: 22px; }
-.setup-watch { width: 242px; height: 242px; margin: 16px auto 24px; padding: 10px; }
+.setup-watch { width: 242px; height: 242px; margin: 16px auto 24px; }
+.setup-watch .watch-case { padding: 10px; }
 .setup-watch .watch-face { justify-content: center; padding: 0; }
 .setup-watch .companion { transform: scale(1.2); margin: 0; }
 .device-summary { display: flex; justify-content: space-between; align-items: center; padding: 22px 10px 16px; gap: 14px; }

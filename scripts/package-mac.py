@@ -61,6 +61,7 @@ def build_lame():
 def main():
     if os.uname().machine != "arm64" or os.uname().sysname != "Darwin":
         raise SystemExit("This package targets Apple Silicon Macs.")
+    run("bash", "scripts/build-app-icon.sh")
     run("npm", "run", "check")
     run(sys.executable, "scripts/fetch-voices.py")
     run(sys.executable, "scripts/firmware-manifest.py")
@@ -84,7 +85,8 @@ def main():
     copytree(ROOT / ".tools/kokoro", tools / "kokoro")
     shutil.copy2(lame, tools / "lame")
     copytree(ROOT / "bridge/public", RES / "bridge/public")
-    shutil.copy2(ROOT / "desktop/assets/AppIcon.icns", RES / "AppIcon.icns")
+    shutil.copy2(ROOT / "desktop/assets/AppIcon.icns", RES / "MaestroAppIcon.icns")
+    shutil.copy2(ROOT / ".cache/app-icon/Assets.car", RES / "Assets.car")
     (RES / "scripts").mkdir()
     for name in ["device.py", "grok-reply.py", "speech.py"]: shutil.copy2(ROOT / "scripts" / name, RES / "scripts" / name)
     for name in ["package.json", "package-lock.json"]: shutil.copy2(ROOT / name, RES / name)
@@ -118,11 +120,13 @@ def main():
     run(sys.executable, "scripts/fetch-licenses.py")
     (notices / "README.txt").write_text("Maestro's own source: MIT. The existing Codex companion and native Muse artwork retain their own rights; confirm redistribution terms before publishing. See THIRD_PARTY_NOTICES.md and Character-sources.md for dependencies and art. Speech tools retain their GPL/LGPL terms; SOURCES.txt explains how to rebuild or replace them. Publish the matching Maestro source and third-party source archives beside this app. Node, Python, JavaScript and Python packages retain their own license files. Source: https://github.com/maxgrev/maestro\n")
     info = {"CFBundleIdentifier": "dev.maestro.stopwatch", "CFBundleName": "Maestro", "CFBundleExecutable": "Maestro", "CFBundleIconFile": "AppIcon", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": version, "CFBundleVersion": version, "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True, "NSLocalNetworkUsageDescription": "Maestro connects your StopWatch to agents on this Mac.", "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True}}
+    info.update(plistlib.loads((ROOT / ".cache/app-icon/Info.plist").read_bytes()))
     (APP / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
     run("swiftc", "-parse-as-library", "-target", "arm64-apple-macos14.0", "-module-cache-path", str(ROOT / ".cache/swift"), "-O", "-framework", "AppKit", "-framework", "WebKit", str(ROOT / "desktop/Maestro.swift"), "-o", str(APP / "Contents/MacOS/Maestro"))
     # Local development signature. A public release needs Developer ID + notarization.
     run("codesign", "--force", "--deep", "--sign", "-", str(APP))
     run("codesign", "--verify", "--deep", "--strict", str(APP))
+    run("touch", str(APP))
     run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(APP), str(ROOT / "dist/Maestro-apple-silicon.zip"))
     run(sys.executable, "scripts/package-source.py")
     print("Built " + str(APP))

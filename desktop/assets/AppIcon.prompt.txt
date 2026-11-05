@@ -1,5 +1,7 @@
 Created with the built-in image_gen tool. Transparent PNG, exported to 1024px.
-Rebuild AppIcon.icns with: bash scripts/build-app-icon.sh
+Rebuild AppIcon.icns and the compiled macOS asset catalog with: bash scripts/build-app-icon.sh
+The app sets CFBundleIconName and includes Assets.car so macOS uses the app icon without a fallback frame.
+AppIcon.icon.json defines the native graphite background and fills the icon with the original artwork. The asset compiler exports the matching ICNS file.
 The artwork represents a graphite voice remote, the existing sage Maestro signal mark, and the StopWatch's yellow push-to-talk button.
 Reference: https://developer.apple.com/design/human-interface-guidelines/app-icons
 
