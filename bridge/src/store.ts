@@ -119,7 +119,7 @@ export class Store {
         .run(next.state, next.text, next.reply, next.output, next.error, JSON.stringify(next.target), next.updated, next.id);
       if (['done', 'needs_attention', 'failed', 'uncertain'].includes(next.state)) this.inbox.add({
         key: changes.sourceKey ?? `turn:${next.id}:${next.state}`, target: next.target, turn: next.id,
-        reply: next.reply || next.error, attention: next.state !== 'done',
+        reply: next.reply || next.error, text: next.text, attention: next.state !== 'done',
       });
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }

@@ -11,6 +11,9 @@ export interface Target {
   kind?: string;
   project?: string;
   character?: 'grok' | 'codex' | 'claude' | 'pi' | 'dot';
+  session?: string;
+  cwd?: string;
+  sessionPath?: string;
 }
 export interface Turn {
   id: string;

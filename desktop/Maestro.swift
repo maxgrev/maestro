@@ -39,7 +39,7 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
         let viewMenu = NSMenu(title: "View"), viewItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
         viewItem.submenu = viewMenu; menu.addItem(viewItem)
         viewMenu.addItem(withTitle: "Conversations", action: #selector(openConversations), keyEquivalent: "1")
-        viewMenu.addItem(withTitle: "Inbox", action: #selector(openInbox), keyEquivalent: "2")
+        viewMenu.addItem(withTitle: "Unread Conversations", action: #selector(openUnread), keyEquivalent: "2")
         viewMenu.addItem(withTitle: "Setup", action: #selector(openSetup), keyEquivalent: "3")
         let windowMenu = NSMenu(title: "Window"), windowItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
         windowItem.submenu = windowMenu; menu.addItem(windowItem); NSApp.windowsMenu = windowMenu
@@ -79,12 +79,14 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
     }
     @objc private func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc private func openConversations() { navigate(to: "") }
-    @objc private func openInbox() { navigate(to: "inbox.html") }
+    @objc private func openUnread() { navigate(to: "?filter=unread") }
     @objc private func openSetup() { navigate(to: "setup.html") }
     @objc private func openCredits() { navigate(to: "characters/credits.html") }
     private func navigate(to path: String) {
         showWindow()
-        web.load(URLRequest(url: localURL.deletingLastPathComponent().appendingPathComponent(path)))
+        if let destination = URL(string: path, relativeTo: localURL.deletingLastPathComponent())?.absoluteURL {
+            web.load(URLRequest(url: destination))
+        }
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool { showWindow(); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -103,7 +105,7 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
             try fm.createDirectory(at: data, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             if let bytes = try? Data(contentsOf: data.appendingPathComponent("config.json")),
                let config = try JSONSerialization.jsonObject(with: bytes) as? [String: Any], let port = config["localPort"] as? Int {
-                localURL = URL(string: "http://localhost:\(port)/setup.html")!
+                localURL = URL(string: "http://localhost:\(port)/")!
             }
         } catch { failure("Maestro could not create its private storage folder."); return }
         let health = localURL.deletingLastPathComponent().appendingPathComponent("api/health")

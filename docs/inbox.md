@@ -1,6 +1,12 @@
-# Inbox
+# Conversations and saved replies
 
-Open **Agents → Inbox** on the StopWatch, or **Inbox** in the Mac app. Each row shows the agent’s character, conversation, and a reply preview. Tap a row or select it with yellow to read the complete answer. Blue moves down; hold blue or tap Back to return. Older replies have their own next page.
+On the Mac, open **Conversations**. Choose **All** or **Unread**, then select a conversation to read its history and reply. The reply box stays below the messages. Drafts stay with their conversation when you switch chats. **⌘2** opens the Unread filter. Old links to the Mac inbox open that filter too.
+
+Saved Codex, Claude Code, and Pi sessions show **Connect session** when they need a connection. Connecting resumes that exact session on your Mac; it sends no message and keeps the agent’s approval settings. If the agent needs installation or sign-in, use **Agent setup**. While an agent works, you can draft a reply and send it when the session is ready. Muse replies still go through the StopWatch.
+
+History loads per conversation, with **Earlier messages** for older pages. Opening a native session also loads its earlier user messages and completed answers through the existing provider readers. Older history does not trigger new alerts, and importing history never clears an existing unread receipt. Internal task notices, tool output, and compaction summaries do not appear as user messages. Terminal output from a Maestro request remains available in a disclosure.
+
+Open **Agents → Inbox** on the StopWatch. Each row shows the agent’s character, conversation, and a reply preview. Tap a row or select it with yellow to read the complete answer. Blue moves down; hold blue or tap Back to return. Older replies have their own next page.
 
 Unread counts appear beside conversations and on the home list icon. Opening a reply marks only that reply as read. Reading on the Mac clears the same badge on the watch. Switching agents loads that conversation’s latest saved reply without playing it. Starting a new message clears the home preview but keeps the saved reply in the inbox.
 
@@ -15,13 +21,13 @@ Nearby completions share a 160 ms vibration. The watch waits at least two second
 ## Work started elsewhere
 
 - **Dot:** ask your connected Dot to send a result or question to Maestro. Its scoped `notify_maestro` tool adds one receipt per update ID without changing the active conversation. This is a requested Dot action, not a scan of all ChatGPT history.
-- **Codex:** final answers from local desktop, CLI, editor, and batch sessions. Maestro reads the official app-server API. It never resumes the session or grants tool approval. Child-agent turns are excluded to avoid duplicate reports from the same task.
+- **Codex:** final answers from local desktop, CLI, editor, and batch sessions. Background collection reads the official app-server API without resuming a session or granting tool approval. **Connect session** is a separate, explicit action. Child-agent turns are excluded to avoid duplicate reports from the same task.
 - **Claude Code:** final text from local sessions through the official session reader. Tool narration and thinking blocks are excluded.
 - **Pi:** completed replies on the current branch of its local v3 session files. Abandoned branches and incomplete writes are excluded.
 - **Muse:** complete messages from the existing SDK subscription, including while another agent is selected. The watch must be connected when Muse sends the event; the SDK does not provide a durable history catch-up here. Pending forwards retry while the watch remains on, but are not stored across a device restart.
 - **Grok Bot:** the main Bot has a saved instruction to call the existing reply helper with `--notify` for external work. This is an agent-followed instruction, not a guaranteed provider event hook. Other Grok bots need the same instruction separately. If its Mac connection is offline, retry waits until the Bot next runs. The live external callback was verified.
 
-External coding sessions appear as **Saved replies** in the picker. They can be read, but sending into them still requires an attached Herdr session. Local discovery does not cover agents running on another computer or an unconnected cloud account. It scans about every five seconds; the watch polls about every three seconds on a separate inbox worker. Reading and collection continue during playback; vibration waits for quiet.
+External coding sessions appear as **Saved replies** in the watch picker until connected. You can read them there and use **Connect session** in the Mac conversation to enable replies. Local discovery does not cover agents running on another computer or an unconnected cloud account. It scans about every five seconds; the watch polls about every three seconds on a separate inbox worker. Reading and collection continue during playback; vibration waits for quiet.
 
 Monitoring starts when this version first runs. Existing Maestro history imports as read; unrelated old agent history does not flood the inbox. Supported coding-session timestamps allow the next scan to collect completions that happened while Maestro was stopped. Very large or unreadable sessions report a provider warning on the Mac inbox.
 

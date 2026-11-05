@@ -5,14 +5,19 @@ import type { SpeechEngine } from './speech.js';
 import { Store } from './store.js';
 import { UserError, type Target } from './types.js';
 import type { Dot } from './dot.js';
+import { Conversations } from './conversations.js';
 
 export const requestId = z.string().uuid();
 export class Service {
+  readonly conversations: Conversations;
+  private connections = new Map<string,Promise<Target>>();
   dot?: Dot;
-  observer?: { warnings: Set<string> };
+  observer?: { warnings: Set<string>; history?: (id: string,cursor?: string) => Promise<{next: string|null;warning?: string;busy?: boolean}> };
   private tasks = new Set<Promise<void>>();
   private accepting = true;
-  constructor(readonly config: Config, readonly store: Store, readonly herdr: Herdr, readonly speech: SpeechEngine, private fetcher = fetch) {}
+  constructor(readonly config: Config, readonly store: Store, readonly herdr: Herdr, readonly speech: SpeechEngine, private fetcher = fetch) {
+    this.conversations = new Conversations(store);
+  }
   private grokTarget(): Target | undefined {
     return this.config.grok ? { id: 'grok', name: this.config.grok.name, provider: 'grok', detail: '', status: 'ready', available: true, character: 'grok' } : undefined;
   }
@@ -25,10 +30,27 @@ export class Service {
     if (dot) targets.unshift(dot);
     if (grok) targets.unshift(grok);
     else warnings.push('Grok Bot needs a webhook and reply helper.');
-    for (const target of this.store.inbox.targets()) if (target.id !== 'muse' && !targets.some(t => t.id === target.id)) {
+    for (const target of targets) if (target.session) this.store.inbox.bindSession(target.session,target);
+    for (const target of this.store.inbox.targets()) if (target.id !== 'muse' && !targets.some(t => t.id === target.id || t.session === target.session)) {
       targets.push({ ...target, provider: 'herdr', character: target.character as Target['character'], detail: target.detail ?? '', status: 'Saved replies', available: false });
     }
     return { targets, warnings };
+  }
+  connectConversation(id: string): Promise<Target> {
+    const pending = this.connections.get(id);
+    if (pending) return pending;
+    const connect = async () => {
+      const current = (await this.herdr.sessions()).find(session => session.target.session === id);
+      if (current) return current.target;
+      const saved = this.store.inbox.conversationTarget(id);
+      if (!saved) throw new UserError('This conversation is no longer available. Refresh the list.',404);
+      const activity = await this.observer?.history?.(id);
+      if (activity?.busy) throw new UserError('This agent is still working. Wait for its answer before connecting the session.',409);
+      return this.herdr.resume(this.store.inbox.conversationTarget(id) ?? saved);
+    };
+    const result = connect().finally(() => this.connections.delete(id));
+    this.connections.set(id,result);
+    return result;
   }
   async submit(id: string, targetId: string, body: string | Buffer) {
     requestId.parse(id);

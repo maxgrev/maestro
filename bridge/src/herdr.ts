@@ -1,11 +1,13 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
-import { dirname, delimiter } from 'node:path';
+import { basename, dirname, delimiter, isAbsolute } from 'node:path';
+import { stat } from 'node:fs/promises';
 import { captureReply } from './agent-reply.js';
 import type { Config } from './config.js';
 import { UserError, type Target } from './types.js';
 import { agentBinary, agentReadiness, connectAgent } from './agent-setup.js';
+import type { InboxTarget } from './inbox.js';
 const exec = promisify(execFile);
 
 export interface Agent {
@@ -45,8 +47,13 @@ export class Herdr {
     const named = a.name && !a.name.startsWith('m-') ? a.name : a.title;
     const chat = title && /[\p{L}\p{N}]/u.test(title) ? title : named;
     const detail = chat && chat.toLowerCase() !== name.toLowerCase() && chat !== a.cwd ? chat : '';
+    const session = a.agent_session;
+    const native = session && typeof session === 'object' && 'value' in session && typeof session.value === 'string'
+      ? session.value : undefined;
     return { id: `herdr:${a.pane_id}:${identity(a)}`, name, provider: 'herdr', detail, status: a.agent_status,
       available: ['idle', 'done'].includes(a.agent_status), pane: a.pane_id, identity: identity(a),
+      session: native ? `${a.agent}:${basename(native,'.jsonl')}` : undefined, cwd: a.cwd,
+      sessionPath: a.agent === 'pi' ? native : undefined,
       character: ['codex', 'claude', 'pi'].includes(a.agent ?? '') ? a.agent as Target['character'] : undefined };
   }
   async targets(): Promise<Target[]> {
@@ -66,6 +73,30 @@ export class Herdr {
     const result = await this.call(['agent', 'list']);
     if (!Array.isArray(result.agents)) throw new Error('Herdr agent list has an unsupported shape.');
     return result.agents.filter(a => a.agent).map(agent => ({ agent, target: this.target(agent) }));
+  }
+  async resume(saved: InboxTarget): Promise<Target> {
+    const [kind,id] = (saved.session ?? '').split(':');
+    if (!['codex','claude','pi'].includes(kind ?? '') || !id || !saved.cwd || !isAbsolute(saved.cwd)
+      || !(await stat(saved.cwd).catch(() => undefined))?.isDirectory()) throw new UserError('This session’s project is unavailable. Check its location on your Mac.',409);
+    if (kind !== 'pi' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new UserError('This saved session cannot be connected. Open it in its agent app.',409);
+    if (kind === 'pi' && (!saved.sessionPath || !isAbsolute(saved.sessionPath) || !saved.sessionPath.endsWith('.jsonl')
+      || basename(saved.sessionPath,'.jsonl') !== id)) throw new UserError('Open this Pi session on your Mac so Maestro can find its session file.',409);
+    const binary = agentBinary(kind as 'codex'|'claude'|'pi');
+    if (!binary) throw new UserError(`Install ${saved.name} in Setup before connecting this session.`,409);
+    const ready = await agentReadiness(kind as 'codex'|'claude'|'pi');
+    if (!ready.signedIn) throw new UserError(`Sign in to ${saved.name} in Setup before connecting this session.`,409);
+    await connectAgent(kind as 'codex'|'claude'|'pi',this.config.herdr.binary);
+    const created = await this.call(['workspace','create','--cwd',saved.cwd,'--label',saved.detail || saved.name,
+      '--env',`PATH=${[dirname(binary),process.env.PATH ?? ''].join(delimiter)}`,'--no-focus']);
+    if (!created.root_pane?.pane_id) throw new Error('The session did not open.');
+    const args = kind === 'codex' ? ['resume',id] : kind === 'claude' ? ['--resume',id] : ['--session',saved.sessionPath!];
+    let agent = (await this.call(['agent','start',`m-${kind}-${Date.now()}`,'--kind',kind!,'--pane',created.root_pane.pane_id,'--',...args],45_000)).agent;
+    for (let attempt=0; agent && !agent.agent_session && attempt<10; attempt++) {
+      await new Promise(resolve => setTimeout(resolve,200));
+      agent = (await this.call(['agent','get',created.root_pane.pane_id])).agent;
+    }
+    if (!agent || this.target(agent).session !== saved.session) throw new UserError('The session could not be verified. Check it on your Mac before replying.',409);
+    return this.target(agent);
   }
   async prepare(target: Target, requestId: string): Promise<Target> {
     if (target.kind) {

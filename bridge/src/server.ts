@@ -49,6 +49,21 @@ export function buildServer(service: Service, options: { local?: boolean; https?
   if (!options.local) dotServer?.register(app);
   app.get('/api/health', async () => ({ name: 'Maestro', version: '0.2.0', speech: 'local', muse: 'Pair on the device using the Muse app' }));
   app.get('/api/targets', () => service.targets());
+  app.get('/api/conversations', async () => {
+    const { targets,warnings } = await service.targets();
+    return { conversations: service.conversations.list(targets), warnings: [...warnings,...[...service.observer?.warnings ?? []]
+      .map(provider=>`Could not check ${provider}. Saved messages are still here.`)] };
+  });
+  app.get('/api/conversations/history', req => {
+    const { id,before } = z.object({ id: z.string().min(1).max(250), before: z.string().max(800).optional() }).parse(req.query);
+    const history = service.conversations.history(id,before);
+    return options.local ? { ...history, entries: history.entries.map(entry => ({ ...entry, replyHtml: renderMarkdown(entry.reply) })) } : history;
+  });
+  app.post('/api/conversations/sync', async req => {
+    const { id,cursor } = z.object({ id: z.string().min(1).max(250),cursor: z.string().max(800).optional() }).strict().parse(req.body);
+    try { return await service.observer?.history?.(id,cursor) ?? {next: null}; }
+    catch { return { next: cursor ?? null, warning: 'Earlier messages could not be loaded. Saved messages are still available. Try again.' }; }
+  });
   app.get('/api/inbox/status', () => ({ ...service.store.inbox.status(), warnings: [...service.observer?.warnings ?? []] }));
   app.get('/api/inbox', req => {
     const q = z.object({ before: z.coerce.number().int().positive().safe().optional(), target: z.string().max(250).default('') }).parse(req.query);
@@ -124,6 +139,18 @@ export function buildServer(service: Service, options: { local?: boolean; https?
     return reply.type(b.format === 'pcm' ? 'audio/pcm' : 'audio/mpeg').send(audio);
   });
   if (options.local) {
+    app.get('/inbox.html', async (_req,reply) => reply.redirect('/?filter=unread'));
+    app.post('/api/conversations/connect', async req => {
+      const { id } = z.object({ id: z.string().min(1).max(250) }).strict().parse(req.body);
+      return { target: await service.connectConversation(id) };
+    });
+    app.post('/api/conversations/focus', async req => {
+      const { id } = z.object({ id: z.string().min(1).max(250) }).strict().parse(req.body);
+      const session = (await service.herdr.sessions()).find(session => session.target.session === id || session.target.id === id);
+      if (!session?.target.pane) throw new UserError('This session is no longer connected. Refresh the conversation.',409);
+      await service.herdr.call(['agent','focus',session.target.pane]);
+      return { opened: true };
+    });
     if (service.dot) {
       const dot = service.dot;
       app.get('/api/setup/dot', () => dot.state());
