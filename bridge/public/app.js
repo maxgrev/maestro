@@ -1,3 +1,5 @@
+import { showSidebar, syncSidebar } from '/conversation-layout.js';
+
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 let conversations = [], selected = '', requested = params.get('conversation'), unreadOnly = params.get('filter') === 'unread';
@@ -41,7 +43,6 @@ function renderList() {
   const query = $('search').value.trim().toLocaleLowerCase();
   const unread = conversations.filter(c => !c.id.startsWith('new:') && c.unread > 0).length;
   $('unread-count').textContent = unread || '';
-  $('nav-unread').textContent = unread; $('nav-unread').hidden = !unread;
   $('filter-all').setAttribute('aria-pressed', String(!unreadOnly));
   $('filter-unread').setAttribute('aria-pressed', String(unreadOnly));
   const visible = conversations.filter(c => !c.id.startsWith('new:') && (!unreadOnly || c.unread || c.id === selected && selectedWasUnread)
@@ -116,12 +117,12 @@ function choose(id, focus = false) {
     if (/^(codex|claude|pi):/.test(id)) void syncNative();
   }
   if (focus) document.body.dataset.threadOpen = 'true';
-  renderList(); renderConnection(); url();
+  renderList(); renderConnection(); syncSidebar(); url();
   if (focus) $('thread-title').focus({ preventScroll: true });
 }
 function setFilter(unread) {
   unreadOnly = unread; selectedWasUnread = !!current()?.unread;
-  delete document.body.dataset.threadOpen; renderList(); url();
+  showSidebar(); renderList(); url();
 }
 const reads = new IntersectionObserver(events => {
   if (document.visibilityState !== 'visible') return;
@@ -237,10 +238,12 @@ async function refresh() {
       }
     }
     if (requested) { if (conversations.some(c => c.id === requested)) choose(requested, true); requested = null; }
-    if (!selected && matchMedia('(min-width: 1051px)').matches) {
+    if (!selected && matchMedia('(min-width: 761px)').matches) {
       const first = conversations.find(c => !c.id.startsWith('new:') && (!unreadOnly || c.unread)); if (first) choose(first.id);
     }
-    renderList(); renderConnection(); if (selected) await loadHistory();
+    renderList(); renderConnection();
+    if (params.has('new')) { params.delete('new'); openNew(); url(); }
+    if (selected) await loadHistory();
   } catch (error) { $('connection').textContent = 'Mac offline'; $('list-error').textContent = error.message; $('conversations').setAttribute('aria-busy', 'false'); }
   finally { listBusy = false; $('refresh').disabled = false; }
 }
@@ -293,12 +296,13 @@ function openNew() {
     $('new-targets').append(button);
   }
   if (!choices.length) $('new-targets').append(el('p', 'Connect an agent and choose a project in Setup.'));
-  $('new-dialog').showModal();
+  if (!$('new-dialog').open) $('new-dialog').showModal();
 }
 $('new-conversation').onclick = openNew;
+window.addEventListener('maestro:new-conversation', openNew);
 $('new-dialog').addEventListener('click', event => { if (event.target === $('new-dialog')) { const rect = event.target.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.target.close(); } });
 $('older').onclick = () => { if (dbCursor) void loadHistory(true); else if (nativeCursor) void syncNative(nativeCursor); };
-$('back').onclick = () => { delete document.body.dataset.threadOpen; ([...$('conversations').querySelectorAll('button')].find(row => row.dataset.conversation === selected) || $('search')).focus(); };
+$('back').onclick = () => { showSidebar(); ([...$('conversations').querySelectorAll('button')].find(row => row.dataset.conversation === selected) || $('search')).focus(); };
 $('filter-all').onclick = () => setFilter(false); $('filter-unread').onclick = () => setFilter(true);
 $('search').addEventListener('input', renderList); $('refresh').onclick = () => { void refresh(); if (/^(codex|claude|pi):/.test(selected)) void syncNative(); };
 $('conversations').addEventListener('keydown', event => {
@@ -309,7 +313,8 @@ $('conversations').addEventListener('keydown', event => {
 });
 document.addEventListener('keydown', event => {
   if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key === '2') { event.preventDefault(); setFilter(true); $('search').focus(); }
-  if ((event.metaKey || event.ctrlKey) && event.key === 'f') { event.preventDefault(); delete document.body.dataset.threadOpen; $('search').focus(); }
+  if ((event.metaKey || event.ctrlKey) && event.key === 'f') { event.preventDefault(); showSidebar(); $('search').focus(); }
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'n') { event.preventDefault(); openNew(); }
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { for (const node of $('history').querySelectorAll('[data-receipts]')) { reads.unobserve(node); reads.observe(node); } void refresh(); } });
 window.addEventListener('pagehide', () => { saveDraft(selected, $('message').value); stopSpeech(); controller?.abort(); });

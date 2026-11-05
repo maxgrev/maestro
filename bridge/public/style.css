@@ -136,3 +136,21 @@ code, pre { font-family: ui-monospace, monospace; font-size: .9em; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; animation-timing-function: var(--curve); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 @media (prefers-contrast: more) { :root[data-theme], :root:not([data-theme]) { --muted: var(--text); --line: var(--text); }.agent, .setup-workspace, .inbox-card { outline: 1px solid var(--line); }.secondary { box-shadow: inset 0 0 0 1px var(--text); } }
+
+/* The browser uses this compact toolbar; the Mac app provides an NSToolbar. */
+.window-toolbar { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-height: 54px; padding: 7px 16px; background: var(--sidebar); }
+.toolbar-title { flex: 1; font: 600 18px var(--display); letter-spacing: -.025em; }
+.toolbar-button { min-width: 38px; min-height: 38px; padding: 8px; border-radius: 8px; color: var(--text); background: transparent; }
+.toolbar-button:hover { background: var(--surface-inset); filter: none; }
+.toolbar-button svg { width: 22px; height: 22px; }
+.toolbar-back { display: inline-flex; align-items: center; gap: 9px; min-height: 38px; color: var(--text); text-decoration: none; font-size: 14px; }
+.toolbar-back svg { width: 18px; height: 18px; }
+.native-app .window-toolbar { display: none; }
+.utility-page .app-main { max-width: 1260px; min-height: 0; margin: 0 auto; padding: 30px clamp(22px, 4vw, 56px); }
+.utility-page .page-heading h1 { font-size: 32px; }
+.app-settings { max-width: 600px; margin-top: 28px; padding: 0 4px; scroll-margin-top: 24px; }
+.app-settings>summary { min-height: 44px; align-content: center; font-weight: 600; }
+.app-settings .appearance-row { justify-content: flex-start; gap: 24px; margin: 16px 0; }
+.app-settings .appearance-row label { display: block; font-size: 14px; color: var(--text); }
+.app-settings .appearance-row select { max-width: 160px; min-height: 40px; padding: 8px 12px; font-size: 14px; background: var(--surface-raised); }
+.app-settings>a { display: inline-flex; align-items: center; min-height: 40px; font-size: 13px; }

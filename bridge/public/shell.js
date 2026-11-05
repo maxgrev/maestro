@@ -1,10 +1,3 @@
-const icons = {
-  conversations: '<path d="M4 4.5h16v11H9l-5 4v-15Z"/><path d="M8 8.5h8M8 11.5h5"/>',
-  setup: '<circle cx="12" cy="12" r="7.5"/><path d="m6 5-1.5-1.5M18 5l1.5-1.5M12 8v4l3 2"/>',
-};
-for (const link of document.querySelectorAll('[data-nav]')) {
-  link.insertAdjacentHTML('afterbegin', `<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[link.dataset.nav] || ''}</svg>`);
-}
 const appearance = document.getElementById('appearance');
 function syncNativeAppearance() {
   window.webkit?.messageHandlers?.appearance?.postMessage(document.documentElement.dataset.theme || 'system');
@@ -27,12 +20,14 @@ if (appearance) {
     else applyTheme();
     try { localStorage.setItem('maestro-appearance', theme); } catch { /* Optional preference. */ }
   });
-  syncNativeAppearance();
 }
+syncNativeAppearance();
+const appSettings = document.getElementById('app-settings');
+if (appSettings && location.hash === '#app-settings') { appSettings.open = true; appSettings.scrollIntoView({ block: 'start' }); }
 document.addEventListener('keydown', event => {
   if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
   if (event.key === '2' && document.body.classList.contains('conversations-page')) return;
-  const destination = { '1': '/', '2': '/?filter=unread', '3': '/setup.html', ',': '/setup.html' }[event.key];
+  const destination = { '1': '/?sidebar=open', '2': '/?filter=unread', '3': '/setup.html', ',': '/setup.html#app-settings' }[event.key];
   if (destination) { event.preventDefault(); location.assign(destination); }
 });
 const connection = document.getElementById('connection');

@@ -2,6 +2,8 @@
 
 On the Mac, open **Conversations**. Choose **All** or **Unread**, then select a conversation to read its history and reply. The reply box stays below the messages. Drafts stay with their conversation when you switch chats. **⌘2** opens the Unread filter. Old links to the Mac inbox open that filter too.
 
+The conversation list is the app’s only sidebar. Drag its edge to resize it, or double-click the edge to restore its 300 px width. **⌘B** and the toolbar button show or hide the list without losing your draft or place in the conversation. **⌘F** opens search; **⌘N** starts a new conversation. **Device & agent setup** sits at the bottom of the list. **Settings… (⌘,)** opens Appearance and Credits.
+
 Saved Codex, Claude Code, and Pi sessions show **Connect session** when they need a connection. Connecting resumes that exact session on your Mac; it sends no message and keeps the agent’s approval settings. If the agent needs installation or sign-in, use **Agent setup**. While an agent works, you can draft a reply and send it when the session is ready. Muse replies still go through the StopWatch.
 
 History loads per conversation, with **Earlier messages** for older pages. Opening a native session also loads its earlier user messages and completed answers through the existing provider readers. Older history does not trigger new alerts, and importing history never clears an existing unread receipt. Internal task notices, tool output, and compaction summaries do not appear as user messages. Terminal output from a Maestro request remains available in a disclosure.

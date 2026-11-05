@@ -2,12 +2,15 @@ import AppKit
 import WebKit
 
 @main
-final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class MaestroApp: NSObject, NSApplicationDelegate, NSToolbarDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var web: WKWebView!
     private var server: Process?
     private var statusItem: NSStatusItem!
     private var awake: NSObjectProtocol?
+    private var sidebarItem: NSToolbarItem?
+    private let sidebarID = NSToolbarItem.Identifier("maestro.sidebar")
+    private let newConversationID = NSToolbarItem.Identifier("maestro.newConversation")
     private var localURL = URL(string: "http://localhost:4210/setup.html")!
     static func main() {
         let app = NSApplication.shared
@@ -23,10 +26,13 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
         appMenu.addItem(withTitle: "About Maestro", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Open Maestro", action: #selector(showWindow), keyEquivalent: "0")
-        appMenu.addItem(withTitle: "Settings…", action: #selector(openSetup), keyEquivalent: ",")
+        appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Maestro", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         NSApp.mainMenu = menu
+        let file = NSMenu(title: "File"), fileItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
+        fileItem.submenu = file; menu.addItem(fileItem)
+        file.addItem(withTitle: "New Conversation", action: #selector(newConversation), keyEquivalent: "n")
         let edit = NSMenu(title: "Edit"), editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         editItem.submenu = edit; menu.addItem(editItem)
         for (name, action, key) in [("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
@@ -41,6 +47,8 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
         viewMenu.addItem(withTitle: "Conversations", action: #selector(openConversations), keyEquivalent: "1")
         viewMenu.addItem(withTitle: "Unread Conversations", action: #selector(openUnread), keyEquivalent: "2")
         viewMenu.addItem(withTitle: "Setup", action: #selector(openSetup), keyEquivalent: "3")
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(toggleSidebar), keyEquivalent: "b")
         let windowMenu = NSMenu(title: "Window"), windowItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
         windowItem.submenu = windowMenu; menu.addItem(windowItem); NSApp.windowsMenu = windowMenu
         windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -59,9 +67,12 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
         web = WKWebView(frame: .zero, configuration: configuration)
         web.navigationDelegate = self; web.uiDelegate = self
         web.setValue(false, forKey: "drawsBackground")
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 800), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 800), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Maestro"; window.minSize = NSSize(width: 640, height: 580)
-        window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
+        window.titleVisibility = .visible; window.titlebarAppearsTransparent = true
+        let toolbar = NSToolbar(identifier: "MaestroToolbar")
+        toolbar.delegate = self; toolbar.displayMode = .iconOnly; toolbar.showsBaselineSeparator = false
+        window.toolbar = toolbar; window.toolbarStyle = .unifiedCompact
         window.backgroundColor = NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
                 ? NSColor(red: 0.106, green: 0.118, blue: 0.102, alpha: 1)
@@ -78,10 +89,46 @@ final class MaestroApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, W
         start()
     }
     @objc private func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
-    @objc private func openConversations() { navigate(to: "") }
+    @objc private func openConversations() { navigate(to: "?sidebar=open") }
     @objc private func openUnread() { navigate(to: "?filter=unread") }
     @objc private func openSetup() { navigate(to: "setup.html") }
+    @objc private func openSettings() { navigate(to: "setup.html#app-settings") }
     @objc private func openCredits() { navigate(to: "characters/credits.html") }
+    @objc private func toggleSidebar() {
+        if web.url?.path == "/" { web.evaluateJavaScript("window.dispatchEvent(new Event('maestro:toggle-sidebar'))", completionHandler: nil) }
+        else { openConversations() }
+    }
+    @objc private func newConversation() {
+        if web.url?.path == "/" { web.evaluateJavaScript("window.dispatchEvent(new Event('maestro:new-conversation'))", completionHandler: nil) }
+        else { navigate(to: "?new=1") }
+    }
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [sidebarID, .flexibleSpace, newConversationID]
+    }
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
+    }
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.target = self
+        if identifier == sidebarID {
+            item.isNavigational = true
+            item.label = "Sidebar"; item.toolTip = "Show or hide conversations (⌘B)"
+            item.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Toggle conversation sidebar")
+            item.action = #selector(toggleSidebar); sidebarItem = item
+        } else if identifier == newConversationID {
+            item.label = "New Conversation"; item.toolTip = "New conversation (⌘N)"
+            item.image = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: "New conversation")
+            item.action = #selector(newConversation)
+        } else { return nil }
+        return item
+    }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        let conversation = webView.url?.path == "/"
+        sidebarItem?.image = NSImage(systemSymbolName: conversation ? "sidebar.left" : "chevron.left", accessibilityDescription: conversation ? "Toggle conversation sidebar" : "Back to conversations")
+        sidebarItem?.label = conversation ? "Sidebar" : "Conversations"
+        sidebarItem?.toolTip = conversation ? "Show or hide conversations (⌘B)" : "Back to conversations"
+    }
     private func navigate(to path: String) {
         showWindow()
         if let destination = URL(string: path, relativeTo: localURL.deletingLastPathComponent())?.absoluteURL {

@@ -6,22 +6,21 @@
   <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/characters.css"><link rel="stylesheet" href="/conversations.css">
 </head>
 <body class="conversations-page">
-  <header class="app-sidebar">
-    <a class="brand" href="/"><svg viewBox="0 0 28 32" fill="none" aria-hidden="true"><path d="M3 23V10l7 9 4-14 4 14 7-9v13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Maestro</a>
-    <nav class="app-nav" aria-label="Main navigation"><a href="/" data-nav="conversations" aria-current="page">Conversations<span id="nav-unread" class="nav-unread" hidden></span><span class="nav-shortcut" aria-hidden="true">⌘1</span></a><a href="/setup.html" data-nav="setup">Setup<span class="nav-shortcut" aria-hidden="true">⌘3</span></a></nav>
-    <div class="sidebar-footer"><span id="connection" class="bridge-status" role="status">Connecting…</span><div class="appearance-row"><label for="appearance">Appearance</label><select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div>
+  <header class="window-toolbar">
+    <button id="toggle-sidebar" class="toolbar-button" aria-label="Hide conversations" aria-controls="conversation-sidebar" aria-expanded="true" title="Show or hide conversations (⌘B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16M5.5 8h1M5.5 11h1"/></svg></button>
+    <span class="toolbar-title">Maestro</span><button id="new-conversation" class="toolbar-button" aria-label="New conversation" title="New conversation (⌘N)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7M15.5 4.5l4 4M11 13l1-4 6.5-6.5 4 4L16 13l-5 1Z"/></svg></button>
   </header>
   <main class="app-main conversation-main">
-    <div class="page-heading"><h1>Conversations</h1><button id="new-conversation" class="secondary">New conversation</button></div>
+    <h1 class="visually-hidden">Conversations</h1>
     <div class="conversation-workspace">
-      <section class="conversation-list-pane" aria-label="Conversation list">
+      <section id="conversation-sidebar" class="conversation-list-pane" aria-label="Conversation list">
         <label class="search-label" for="search">Search conversations</label><input id="search" type="search" placeholder="Search" autocomplete="off">
         <div class="conversation-filters" aria-label="Filter conversations"><button id="filter-all" aria-pressed="true">All</button><button id="filter-unread" aria-pressed="false">Unread <span id="unread-count"></span></button><button id="refresh" class="refresh-button" aria-label="Refresh conversations" title="Refresh conversations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 8a7.5 7.5 0 1 0 .3 7M19 3.5V8h-4.5"/></svg></button></div>
         <div id="conversations" class="conversation-list" role="list" aria-label="Conversations" aria-busy="true"><div class="conversation-skeleton" aria-label="Loading conversations"><div></div><div></div><div></div></div></div>
-        <details id="warnings" class="connection-details" hidden><summary>Connection details</summary><div id="warning-text"></div></details>
-        <p id="list-error" class="error" role="alert"></p>
+        <footer class="conversation-sidebar-footer"><p id="list-error" class="error" role="alert"></p><details id="warnings" class="connection-details" hidden><summary>Connection details</summary><div id="warning-text"></div></details><span id="connection" class="bridge-status" role="status">Connecting…</span><a class="setup-link" href="/setup.html#device">Device &amp; agent setup<span aria-hidden="true">↗</span></a></footer>
       </section>
-      <section id="thread" class="conversation-thread" aria-label="Selected conversation">
+      <div id="sidebar-resizer" role="separator" aria-label="Resize conversation sidebar" aria-orientation="vertical" aria-controls="conversation-sidebar" aria-valuemin="240" aria-valuemax="420" aria-valuenow="300" tabindex="0" title="Drag to resize. Double-click to reset."></div>
+      <section id="thread" class="conversation-thread" aria-label="Selected conversation" tabindex="-1">
         <div id="no-selection" class="thread-empty"><div class="companion codex" aria-hidden="true"></div><h2>Select a conversation</h2><p>Read an answer or send a message to an agent.</p></div>
         <header id="thread-header" class="thread-header" hidden><button id="back" class="text-button thread-back" aria-label="Back to conversations">←</button><div id="thread-character" class="companion" aria-hidden="true"></div><div class="thread-heading"><h2 id="thread-title" tabindex="-1"></h2><p id="thread-meta"></p></div></header>
         <div id="history-scroll" class="history-scroll" tabindex="0" aria-label="Conversation history" hidden><div class="history-content"><button id="older" class="text-button" hidden>Earlier messages</button><p id="history-status" class="history-status" role="status"></p><div id="history" role="log" aria-live="polite" aria-relevant="additions"></div></div></div>
