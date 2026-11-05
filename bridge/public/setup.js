@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let state, remoteState, busy = false, port = '', lastPorts = '', lastWifi = '';
+let state, remoteState, busy = false, port = '', lastPorts = '', lastWifi = '', lastDevice = '', deviceAction = '';
 async function api(path, body) {
   const response = await fetch(path, body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {});
   const value = await response.json(); if(!response.ok) throw new Error(value.error || 'Could not complete this step.'); return value;
@@ -38,20 +38,37 @@ function render() {
     lastPorts=signature; $('port').replaceChildren();
     const empty=new Option(state.ports.length?'Choose your USB device':'No USB device found','');$('port').add(empty);
     state.ports.forEach(p=>$('port').add(new Option(p.name+' ('+(p.serial||p.port.split('/').pop())+')',p.port)));
-    if(state.ports.some(p=>p.port===port))$('port').value=port;
-    else if(state.ports.length===1){port=state.ports[0].port;$('port').value=port;}
+    if(!state.ports.some(p=>p.port===port)){port=state.ports.length===1?state.ports[0].port:'';$('confirm-model').checked=false;}
+    $('port').value=port;
   }
-  const d=state.device?.port===port ? state.device : null;
+  const d=state.ports.some(p=>p.port===port)&&state.device?.port===port ? state.device : null;
+  const ready=!!d&&d.maestro.version>=2, needsInstall=!!d&&!ready;
+  const deviceSignature=JSON.stringify([port,ready,needsInstall]);
+  if(deviceSignature!==lastDevice){
+    lastDevice=deviceSignature;
+    $('usb-connection').open=!d;
+    $('install-area').open=needsInstall;
+  }
+  $('device-title').textContent=ready?'StopWatch connected':needsInstall?'Install Maestro':'Connect your StopWatch';
+  $('device-description').textContent=ready?'Maestro is installed. Keep the USB cable connected to finish setup.':needsInstall?'Your StopWatch needs Maestro before you can continue.':'Connect it to your Mac with a USB data cable.';
+  $('device-continue').hidden=!ready;
+  $('usb-connection-label').hidden=!d;
+  $('inspect').textContent=deviceAction==='inspect'?'Connecting…':d?'Check connection':'Connect device';
+  $('inspect').hidden=!state.ports.length;
+  $('inspect').classList.toggle('text-button',!!d);
+  $('scan').classList.toggle('text-button',!!state.ports.length);
+  $('device-next').textContent=d?.wifi.state==='connected'?'Review Wi-Fi':'Set up Wi-Fi';
+  $('install-label').textContent=ready?'Update or reinstall Maestro':'Install Maestro';
+  $('install-label').hidden=needsInstall;
+  $('install').classList.toggle('secondary',ready);
   $('port').disabled=busy||!state.ports.length;
-  $('device-state').textContent=d?(d.maestro.version>=2?'Maestro installed':'Firmware update required'):'';
-  $('device-state').classList.toggle('verified',!!d&&d.maestro.version>=2);
   $('usb-help').hidden=!!port;
   $('preview-device-name').textContent=d?.name||'M5Stack StopWatch';
   $('preview-device-state').textContent=d?'USB connected':port?'Not checked':'Not connected';
   document.querySelector('[data-step="device"]').dataset.complete=String(!!d&&d.maestro.version>=2);
   document.querySelector('[data-step="wifi"]').dataset.complete=String(d?.wifi.state==='connected');
-  $('device-next').disabled=busy||!d||d.maestro.version<2;
-  $('wifi-submit').disabled=busy||!d||d.maestro.version<2;
+  $('device-next').disabled=busy||!ready;
+  $('wifi-submit').disabled=busy||!ready;
   $('install-area').hidden=!port||!state.firmware;
   $('firmware-missing').hidden=state.firmware;
   $('install').disabled=busy||!$('confirm-model').checked;
@@ -104,7 +121,7 @@ for(const action of ['enable','disable'])$('remote-'+action).onclick=()=>run(asy
 async function refresh(){
   try{state=await api('/api/setup');render();}
   catch(error){
-    if(!state){$('port').replaceChildren(new Option('Could not check USB devices',''));$('device-state').textContent='Refresh to try again.';$('usb-help').hidden=true;}
+    if(!state){$('port').replaceChildren(new Option('Could not check USB devices',''));$('device-description').textContent='Could not check USB devices. Refresh to try again.';$('usb-help').hidden=true;}
     throw error;
   }
 }
@@ -122,24 +139,31 @@ async function run(fn,errorId='setup-error'){
 }
 async function operation(action,fields={}){
   if(!port)throw new Error('Connect and choose your StopWatch first.');
-  const job=await api('/api/setup/device',{action,port,...fields});
-  $('setup-message').textContent=job.message;
-  for(;;){
-    await new Promise(resolve=>setTimeout(resolve,900));await refresh();
-    const current=state.job;
-    if(!current||current.id!==job.id)throw new Error('The app restarted. Check the device before trying again.');
-    $('setup-message').textContent=current.message;
-    if(current.state==='failed'){$('setup-message').textContent='';throw new Error(current.message);}
-    if(current.state==='done')return current.result;
-  }
+  deviceAction=action;render();
+  try{
+    const job=await api('/api/setup/device',{action,port,...fields});
+    $('setup-message').textContent=action==='inspect'?'':job.message;
+    for(;;){
+      await new Promise(resolve=>setTimeout(resolve,900));await refresh();
+      const current=state.job;
+      if(!current||current.id!==job.id)throw new Error('The app restarted. Check the device before trying again.');
+      if(current.state==='failed'){$('setup-message').textContent='';throw new Error(current.message);}
+      if(current.state==='done'){$('setup-message').textContent='';return current.result;}
+      $('setup-message').textContent=action==='inspect'?'':current.message;
+    }
+  }finally{deviceAction='';$('setup-message').textContent='';}
+}
+async function checkDevice(){
+  await operation('inspect');
+  if(!document.querySelector('[data-panel="device"]').hidden)$('device-title').focus({preventScroll:true});
 }
 document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>show(b.dataset.step));
 document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>show(b.dataset.back));
-$('port').onchange=()=>{port=$('port').value;render();};
+$('port').onchange=()=>{port=$('port').value;$('confirm-model').checked=false;render();};
 $('confirm-model').onchange=render;
 $('scan').onclick=()=>run(refresh);
-$('inspect').onclick=()=>run(async()=>{await operation('inspect');});
-$('install').onclick=()=>run(async()=>{await operation('install',{confirmStopWatch:$('confirm-model').checked});$('setup-message').textContent='Installed. Waiting for the device to restart…';await new Promise(r=>setTimeout(r,6000));await operation('inspect');});
+$('inspect').onclick=()=>run(checkDevice);
+$('install').onclick=()=>run(async()=>{await operation('install',{confirmStopWatch:$('confirm-model').checked});$('setup-message').textContent='Installed. Waiting for the device to restart…';await new Promise(r=>setTimeout(r,6000));await checkDevice();});
 $('device-next').onclick=()=>show('wifi');
 $('keep-wifi').onclick=()=>show('agents');
 $('wifi-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await operation('wifi',{ssid:$('ssid').value,password:$('wifi-password').value});$('wifi-password').value='';show('agents');});};
@@ -186,3 +210,4 @@ async function coding(){try{
 show(location.hash.slice(1)||'device',false);
 void run(async()=>{await refresh();if(state.job?.state==='working')$('setup-message').textContent='A device step is already running. Wait, then refresh to check it.';});
 void coding();
+setInterval(()=>{if(!busy&&!document.hidden)void refresh().catch(()=>{});},3000);

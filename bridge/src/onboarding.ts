@@ -56,6 +56,7 @@ export class Onboarding {
   }
   async state() {
     const devices = await this.run({ action: 'ports' }, () => {});
+    if (this.device && Array.isArray(devices.ports) && !devices.ports.some(port => port?.port === this.device?.port)) this.device = undefined;
     return { ...devices, job: this.job, device: this.device,
       muse: existsSync(resolve(this.data, 'muse-sdk-token')),
       grok: !!this.config.grok, projects: this.config.projects, agents: this.config.agents,
@@ -86,7 +87,10 @@ export class Onboarding {
     }
     this.job = job;
     void this.run(command, message => { job.message = message; }).then(result => {
-      job.result = result; job.state = 'done'; job.message = input.action === 'configure' ? 'Saved. Your device is restarting.' : 'Done';
+      job.result = result; job.state = 'done'; job.message = {
+        inspect: 'StopWatch connected over USB.', install: 'Maestro installed.', wifi: 'Wi-Fi connected.',
+        configure: 'Saved. Your device is restarting.', agents: 'Agent list opened on your StopWatch.',
+      }[input.action];
       if (result.board) this.device = { ...result, port: input.port, checked: Date.now() };
       if (input.action === 'configure' || input.action === 'install') this.device = undefined;
     }).catch(error => { job.state = 'failed'; job.message = error instanceof UserError ? error.message : 'Could not complete this step. Reconnect the device and try again.'; });

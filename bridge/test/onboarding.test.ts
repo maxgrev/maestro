@@ -19,6 +19,24 @@ function fixture() {
   writeFileSync(resolve(data, 'bridge-cert.pem'), 'private-test-certificate');
   return { data, config, cleanup: () => rmSync(data, {recursive:true,force:true}) };
 }
+test('a checked StopWatch loses its connected state when USB disconnects', async () => {
+  const f=fixture();
+  let connected=true;
+  const runner: DeviceRunner=async input=>input.action==='ports'?{ports:connected?[{port:'/dev/cu.test'}]:[]}:
+    {board:'M5Stack StopWatch',maestro:{version:3},wifi:{state:'connected',ssid:'Test network'}};
+  try {
+    const setup=new Onboarding(f.config,runner,f.data);
+    setup.start({action:'inspect',port:'/dev/cu.test'});
+    await new Promise(resolve=>setImmediate(resolve));
+    const checked=await setup.state();
+    assert.equal(checked.device?.port,'/dev/cu.test');
+    assert.equal(checked.job?.message,'StopWatch connected over USB.');
+    connected=false;
+    assert.equal((await setup.state()).device,undefined);
+    connected=true;
+    assert.equal((await setup.state()).device,undefined,'reconnecting needs a fresh check');
+  } finally { f.cleanup(); }
+});
 test('USB jobs reject concurrent writes and never return credentials', async () => {
   const f=fixture();
   let complete!: (value: Record<string,unknown>)=>void, captured: Record<string,unknown>|undefined;

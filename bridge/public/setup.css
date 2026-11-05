@@ -28,6 +28,14 @@
 .setup-workspace form { margin-bottom: 22px; }.setup-workspace form:last-child { margin-bottom: 0; }
 .setup-workspace .field-row { margin-bottom: 18px; }.setup-workspace #inspect { margin-bottom: 0; }
 .setup-workspace .field-help { font-size: 13px; }
+.setup-workspace:has([data-panel="device"]:not([hidden])) { min-height: 0; }
+.device-continue { margin: 24px 0 28px; }
+.usb-connection>summary { min-height: 44px; align-content: center; color: var(--muted); font-size: 13px; cursor: pointer; }
+.usb-connection[open]>summary { margin-bottom: 12px; }
+.usb-connection .field-row { align-items: center; gap: 14px; }
+.usb-connection #scan { flex-shrink: 0; }
+.usb-connection:has(>summary:not([hidden])) #inspect { margin-top: -4px; }
+.usb-connection:has(>summary:not([hidden]))+#usb-help { margin-top: 12px; }
 .check-result { min-height: 20px; margin: 13px 0 18px; color: var(--muted); }
 .check-result:empty, #voice-message:empty { display: none; }
 .check-result.verified { color: var(--success); }
@@ -36,7 +44,7 @@
 .setup-message:empty { display: none; }.setup-message { background: var(--selected); color: var(--text); padding: 14px 16px; border-radius: 12px; margin-bottom: 22px; font-size: 13px; line-height: 1.6; }
 .setup-workspace[aria-busy="true"] .setup-message { position: relative; padding-left: 30px; }.setup-workspace[aria-busy="true"] .setup-message::before { content: ''; position: absolute; left: 14px; top: 21px; width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: job-breathe 1.6s var(--curve) infinite alternate; }
 @keyframes job-breathe { to { opacity: .35; } }
-.install-disclosure { margin-top: 24px; background: var(--surface-raised); padding: 0 16px 16px; border-radius: 12px; font-size: 13px; }.install-disclosure:not([open]) { padding-bottom: 0; }.install-disclosure summary { min-height: 48px; align-content: center; font-weight: 600; }.install-disclosure p { padding-top: 6px; }
+.install-disclosure { margin-top: 16px; font-size: 13px; }.install-disclosure summary { min-height: 44px; align-content: center; color: var(--muted); cursor: pointer; }.install-disclosure p { padding-top: 6px; }
 .agent-setup { padding: 0 16px; margin: 10px -6px; border-radius: 14px; background: var(--surface-raised); }
 .agent-setup>summary { display: flex; align-items: center; gap: 12px; list-style: none; min-height: 78px; position: relative; padding-right: 16px; }
 .agent-setup>summary::-webkit-details-marker, .controls-guide summary::-webkit-details-marker { display: none; }

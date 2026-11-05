@@ -21,13 +21,15 @@
       <div id="setup-message" class="setup-message" role="status" aria-live="polite"></div>
       <div id="setup-error" class="error" role="alert"></div>
       <section data-panel="device">
-        <h2 tabindex="-1">Connect over USB</h2><p>Connect your StopWatch to this Mac with a USB data cable.</p>
-        <label for="port">USB device</label><div class="field-row"><select id="port"><option value="">Looking for a device…</option></select><button id="scan" class="secondary">Refresh</button></div>
-        <button id="inspect">Connect device</button><p id="device-state" class="check-result"></p>
+        <h2 id="device-title" tabindex="-1">Connect your StopWatch</h2><p id="device-description">Connect it to your Mac with a USB data cable.</p>
+        <div id="device-continue" class="device-continue" hidden><button id="device-next" disabled>Set up Wi-Fi</button></div>
+        <details id="usb-connection" class="usb-connection" open><summary id="usb-connection-label" hidden>USB connection</summary>
+          <label for="port">USB device</label><div class="field-row"><select id="port"><option value="">Looking for a device…</option></select><button id="scan" class="text-button">Refresh</button></div>
+          <button id="inspect">Connect device</button>
+        </details>
         <details id="usb-help" class="context-help"><summary>Connection tips</summary><p>If the StopWatch doesn’t appear, try another cable or USB port. Some cables only support charging.</p></details>
         <p id="firmware-missing" class="field-help" hidden>Firmware files are missing. For a source checkout, run <code>npm run firmware:build</code>, then refresh. If you downloaded the Mac app, reinstall it.</p>
-        <details id="install-area" class="install-disclosure" hidden><summary>Install or update Maestro</summary><p>Keep the cable connected. Maestro saves a recovery copy before installation and keeps your Wi-Fi and Muse pairing.</p><label class="checkbox"><input id="confirm-model" type="checkbox"> This USB device is an M5Stack StopWatch.</label><button id="install" class="secondary">Install on StopWatch</button></details>
-        <div class="step-footer"><button id="device-next" disabled>Continue to Wi-Fi</button></div>
+        <details id="install-area" class="install-disclosure" hidden><summary id="install-label">Install Maestro</summary><p>Keep the cable connected. Maestro saves a recovery copy before installation and keeps your Wi-Fi and Muse pairing.</p><label class="checkbox"><input id="confirm-model" type="checkbox"> This USB device is an M5Stack StopWatch.</label><button id="install">Install Maestro</button></details>
       </section>
       <section data-panel="wifi" hidden>
         <h2 tabindex="-1">Wi-Fi</h2>
