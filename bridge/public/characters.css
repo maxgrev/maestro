@@ -1,6 +1,10 @@
 /* The real character sheets retain their own palettes and pixel grids. */
 .companion { position: relative; width: 80px; height: 87px; flex-shrink: 0; display: block; background: transparent; }
 .companion i, .companion b { display: none; }
+.portrait { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: 0 0 32px; pointer-events: none; }
+.portrait>.companion { margin: 0; scale: .38; flex-shrink: 0; }
+.portrait-large { width: 40px; height: 40px; flex-basis: 40px; }
+.portrait-large>.companion { scale: .46; }
 .companion.codex { overflow: hidden; }
 .companion.codex::before { content: ''; position: absolute; top: 0; left: 0; width: 640px; height: 957px; background: url('/characters/codex.webp') 0 0 / 640px 957px no-repeat; }
 .companion.claude { background: url('/characters/claude.png') center / contain no-repeat; image-rendering: pixelated; }

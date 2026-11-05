@@ -1,10 +1,9 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect your Dot | Maestro</title><script src="/appearance.js"></script><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/characters.css"><link rel="stylesheet" href="/dot-setup.css"></head>
-<body class="utility-page"><header class="window-toolbar"><a class="toolbar-back" href="/?sidebar=open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>Conversations</a><span class="toolbar-title"></span></header>
+<body class="utility-page"><header class="window-toolbar"><a class="toolbar-back" href="/setup.html#agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>Agents</a><span class="toolbar-title"></span></header>
 <main class="app-main dot-setup">
-  <a class="text-button back-link" href="/setup.html#agents">← Agents</a>
-  <div class="page-heading"><h1>Connect Dot</h1><div class="companion dot" aria-hidden="true"></div></div>
-  <p id="status" role="status">Checking your connection…</p><a id="remote-required-link" class="text-button" href="/setup.html#wifi" hidden>Set up remote access</a><p id="error" class="error" role="alert"></p>
+  <div class="page-heading"><h1 id="dot-title">Connect Dot</h1><div class="portrait portrait-large" aria-hidden="true"><div class="companion dot"></div></div></div>
+  <p id="status" role="status">Checking your connection…</p><a id="remote-required-link" class="text-button" href="/setup.html#remote-access" hidden>Set up remote access</a><p id="error" class="error" role="alert"></p><button id="retry" class="text-button" hidden>Check connection</button>
   <section id="consent" hidden>
     <h2>Connect ChatGPT to Maestro?</h2><p>Your Dot will receive messages you address to it on Maestro and can send replies and updates to your watch. Other agents’ conversations stay private.</p>
     <button id="approve">Connect my Dot</button><a class="text-button" href="/dot-setup.html">Cancel</a>
@@ -13,11 +12,11 @@
     <form id="enable-form"><label for="name">Name on your watch</label><input id="name" maxlength="60" value="Dot" required><button id="enable">Set up Dot</button></form>
     <div id="instructions" hidden>
       <ol>
-        <li><strong>Add Maestro in ChatGPT.</strong><p>Open Plugins, select +, then Add custom MCP server. Name it Maestro and choose OAuth authentication.</p><a href="https://chatgpt.com/plugins" target="_blank" rel="noreferrer">Open ChatGPT Plugins ↗</a><label for="endpoint">Server address</label><div class="field-row"><input id="endpoint" readonly><button id="copy-url" class="secondary">Copy</button></div><p class="field-help">Leave the OAuth client ID and secret blank. ChatGPT creates its own connection. Finish the connection on this Mac.</p></li>
+        <li><strong>Add Maestro in ChatGPT.</strong><p>Open Plugins, select +, then Add custom MCP server. Name it Maestro and choose OAuth authentication.</p><a href="https://chatgpt.com/plugins" target="_blank" rel="noreferrer">Open ChatGPT Plugins ↗</a><label for="endpoint">Server address</label><div class="field-row"><input id="endpoint" readonly><button id="copy-url" class="secondary copy-button" aria-label="Copy server address">Copy</button></div><p class="field-help">Leave the OAuth client ID and secret blank. ChatGPT creates its own connection. Finish the connection on this Mac.</p></li>
         <li><strong>Connect your existing Dot.</strong><p>Once the plugin is connected, paste this into your Dot’s conversation.</p><textarea id="instruction" rows="5" readonly></textarea><button id="copy-instruction" class="secondary">Copy message for Dot</button></li>
       </ol>
     </div>
-    <div id="connected" hidden><a href="/">Open conversations</a></div>
+    <div id="connected" hidden><a class="button-link" href="/">Open conversations</a></div>
     <button id="disconnect" class="text-button" hidden>Disconnect Dot</button>
   </section>
 </main><script type="module" src="/shell.js"></script><script type="module" src="/dot-setup.js"></script></body></html>

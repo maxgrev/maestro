@@ -129,16 +129,20 @@ test('connecting does not resume an external session that is still working', asy
   finally {store.close();}
 });
 
-test('native history omits task notices and compaction prompts while preserving real user text and replies', () => {
+test('native history omits task notices, handoffs, and compaction prompts while preserving real user text and replies', () => {
   const store=new Store(':memory:'),conversations=new Conversations(store);
   try {
     store.inbox.add({key:source+':notice',target:saved,text:'<task-notification>internal task metadata</task-notification>',reply:'The build finished.'});
     store.inbox.add({key:source+':summary',target:saved,text:'This session is being continued from a previous conversation that ran out of context. Internal summary.',reply:'I continued the task.'});
+    store.inbox.add({key:source+':handoff',target:saved,text:'<agent-message from="helper">\n[Subagent hand-back] Internal report.</agent-message>',reply:'Here is the final answer.'});
+    store.inbox.add({key:source+':literal',target:saved,text:'<agent-message> is an XML tag I want explained.',reply:'It is a tag.'});
     const id=randomUUID();store.create(id,'literal',live,'<task-notification> is the format I want explained.');
     store.update(id,{state:'done',reply:'Explanation'});
     const entries=conversations.history(source).entries;
     assert.ok(entries.find(entry=>entry.reply==='The build finished.')?.text==='');
     assert.ok(entries.find(entry=>entry.reply==='I continued the task.')?.text==='');
+    assert.equal(entries.find(entry=>entry.reply==='Here is the final answer.')?.text,'');
+    assert.equal(entries.find(entry=>entry.reply==='It is a tag.')?.text,'<agent-message> is an XML tag I want explained.');
     assert.equal(entries.find(entry=>entry.id==='turn:'+id)?.text,'<task-notification> is the format I want explained.');
   } finally {store.close();}
 });

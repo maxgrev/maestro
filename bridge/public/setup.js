@@ -1,25 +1,31 @@
 const $ = id => document.getElementById(id);
-let state, remoteState, busy = false, port = '', lastPorts = '', lastWifi = '', lastDevice = '', deviceAction = '';
+let state, remoteState, busy = false, port = '', lastPorts = '', lastWifi = '', lastDevice = '', deviceAction = '', projectLoaded = false;
 async function api(path, body) {
   const response = await fetch(path, body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {});
   const value = await response.json(); if(!response.ok) throw new Error(value.error || 'Could not complete this step.'); return value;
 }
-function show(step, focus = true) {
+function show(step, focus = true, animate = true) {
   if(!['device','wifi','agents','ready'].includes(step))return;
   document.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==step);
-  document.querySelectorAll('[data-step]').forEach(b=>b.dataset.step===step?b.setAttribute('aria-current','step'):b.removeAttribute('aria-current'));
+  const tabs=[...document.querySelectorAll('[data-step]')];
+  tabs.forEach(b=>{const selected=b.dataset.step===step;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});
+  const indicator=document.querySelector('.step-indicator');
+  if(!animate)indicator.style.transition='none';
+  indicator.style.transform=`translateX(${tabs.findIndex(b=>b.dataset.step===step)*100}%)`;
+  if(!animate){indicator.getBoundingClientRect();indicator.style.transition='';}
   $('setup-error').textContent='';
   if(!busy)$('setup-message').textContent='';
   history.replaceState(null,'','#'+step);
   const panel=document.querySelector(`[data-panel="${step}"]`);
   if(focus){panel.querySelector('h2')?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'auto'});}
-  if(focus&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+  if(focus&&animate&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
     const animations=panel.getAnimations(),style=getComputedStyle(panel);
-    const start=animations.length?{transform:style.transform,opacity:style.opacity}:{transform:'translateY(5px)',opacity:.85};
+    const start=animations.length?{opacity:style.opacity}:{opacity:.8};
     animations.forEach(animation=>animation.cancel());
-    panel.animate([start,{transform:'translateY(0)',opacity:1}],{duration:220,easing:'cubic-bezier(.22,.8,.24,1)'});
+    panel.animate([start,{opacity:1}],{duration:140,easing:'cubic-bezier(.23,1,.32,1)'});
   }
   if(step==='wifi')void checkRemote();
+  if(step==='agents')void checkDot();
 }
 function lock(on) {
   busy=on;
@@ -65,8 +71,10 @@ function render() {
   $('usb-help').hidden=!!port;
   $('preview-device-name').textContent=d?.name||'M5Stack StopWatch';
   $('preview-device-state').textContent=d?'USB connected':port?'Not checked':'Not connected';
-  document.querySelector('[data-step="device"]').dataset.complete=String(!!d&&d.maestro.version>=2);
-  document.querySelector('[data-step="wifi"]').dataset.complete=String(d?.wifi.state==='connected');
+  for(const [step,complete]of [['device',ready],['wifi',d?.wifi.state==='connected']]){
+    const tab=document.querySelector(`[data-step="${step}"]`);tab.dataset.complete=String(complete);
+    tab.setAttribute('aria-label',(step==='device'?'Device':'Wi-Fi')+(complete?', complete':''));
+  }
   $('device-next').disabled=busy||!ready;
   $('wifi-submit').disabled=busy||!ready;
   $('install-area').hidden=!port||!state.firmware;
@@ -78,7 +86,7 @@ function render() {
   $('keep-wifi').hidden=d?.wifi.state!=='connected';
   const wifiSignature=JSON.stringify([port,d?.wifi.state,d?.wifi.ssid]);
   if(wifiSignature!==lastWifi){lastWifi=wifiSignature;$('wifi-change').open=d?.wifi.state!=='connected';}
-  $('wifi-change-label').textContent=d?.wifi.state==='connected'?'Change network':'Choose a Wi-Fi network';
+  $('wifi-change-label').hidden=d?.wifi.state!=='connected';
   $('wifi-submit').classList.toggle('secondary',d?.wifi.state==='connected');
   $('muse-state').textContent=d?.link.paired?'Paired':state.muse?'Token saved':'Add token';
   $('muse-device').textContent=d?.name||'your StopWatch';
@@ -92,7 +100,7 @@ function render() {
   $('check-pair').disabled=busy||!port;
   $('verify').disabled=busy||!port;
   $('open-agents').disabled=busy||!d?.maestro.bridge;
-  if(!$('project-path').value&&state.projects[0]){$('project-path').value=state.projects[0].path;$('project-name').value=state.projects[0].name;$('project-trusted').checked=state.projects[0].trusted===true;}
+  if(!projectLoaded){projectLoaded=true;if(state.projects[0]){$('project-path').value=state.projects[0].path;$('project-name').value=state.projects[0].name;$('project-trusted').checked=state.projects[0].trusted===true;}}
   $('ready-checks').replaceChildren();
   for(const [name,value] of [['Device',d?'Connected over USB':'Connect USB to check'],['Wi-Fi',!d?'Not checked':d.wifi.state==='connected'?d.wifi.ssid:'Not connected'],['Mac bridge',!d?'Not checked':d.maestro.bridge?'Connected':'Not connected'],['Muse',!d?'Not checked':d.link.paired?'Paired':'Not paired'],['On the screen',d?.maestro.name||'Not checked']]){
     const row=document.createElement('p'),label=document.createElement('strong'),text=document.createElement('span');label.textContent=name;text.textContent=value;row.append(label,text);$('ready-checks').append(row);
@@ -103,16 +111,21 @@ function renderRemote(){
   if(!remoteState)return;
   $('remote-state').textContent=remoteState.message;
   $('remote-install').hidden=remoteState.installed;
-  $('remote-enable').hidden=!remoteState.installed;
-  $('remote-enable').disabled=busy||!remoteState.connected;
-  $('remote-enable').textContent=remoteState.enabled&&remoteState.available?'Verify remote access':'Enable remote access';
+  const ready=remoteState.enabled&&remoteState.available;
+  $('remote-enable').hidden=!remoteState.installed||!remoteState.connected||ready;
+  $('remote-enable').disabled=busy;
+  $('remote-enable').textContent='Enable remote access';
   $('remote-disable').hidden=!remoteState.enabled&&!remoteState.available;
   $('remote-approve').hidden=!remoteState.approvalUrl;
   if(remoteState.approvalUrl)$('remote-approve').href=remoteState.approvalUrl;
   $('remote-address').hidden=!remoteState.url;
   $('remote-address').textContent=remoteState.url||'';
+  $('remote-check').textContent=ready?'Check connection':'Check again';
+  $('remote-check').classList.remove('secondary');
+  $('remote-check').classList.toggle('text-button',ready||!$('remote-install').hidden||!$('remote-enable').hidden||!$('remote-approve').hidden);
 }
 async function checkRemote(){try{remoteState=await api('/api/setup/remote');renderRemote();}catch{$('remote-state').textContent='Could not check remote access. Try again.';}}
+async function checkDot(){try{const dot=await api('/api/setup/dot');$('dot-state').textContent=dot.connected?'Connected':dot.enabled?'Finish connection':'Not connected';}catch{$('dot-state').textContent='Not checked';}}
 $('remote-check').onclick=()=>run(checkRemote);
 for(const action of ['enable','disable'])$('remote-'+action).onclick=()=>run(async()=>{
   $('remote-state').textContent=action==='enable'?'Checking the secure connection…':'Turning off remote access…';
@@ -157,15 +170,22 @@ async function checkDevice(){
   await operation('inspect');
   if(!document.querySelector('[data-panel="device"]').hidden)$('device-title').focus({preventScroll:true});
 }
-document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>show(b.dataset.step));
-document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>show(b.dataset.back));
+document.querySelectorAll('[data-step]').forEach(b=>b.onclick=event=>show(b.dataset.step,true,!!event.detail));
+document.querySelector('.setup-steps').addEventListener('keydown',event=>{
+  if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+  const tabs=[...document.querySelectorAll('[data-step]')],index=tabs.indexOf(event.target);
+  if(index<0)return;event.preventDefault();
+  const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+  show(tabs[next].dataset.step,false,false);tabs[next].focus();
+});
+document.querySelectorAll('[data-back]').forEach(b=>b.onclick=event=>show(b.dataset.back,true,!!event.detail));
 $('port').onchange=()=>{port=$('port').value;$('confirm-model').checked=false;render();};
 $('confirm-model').onchange=render;
 $('scan').onclick=()=>run(refresh);
 $('inspect').onclick=()=>run(checkDevice);
 $('install').onclick=()=>run(async()=>{await operation('install',{confirmStopWatch:$('confirm-model').checked});$('setup-message').textContent='Installed. Waiting for the device to restart…';await new Promise(r=>setTimeout(r,6000));await checkDevice();});
-$('device-next').onclick=()=>show('wifi');
-$('keep-wifi').onclick=()=>show('agents');
+$('device-next').onclick=event=>show('wifi',true,!!event.detail);
+$('keep-wifi').onclick=event=>show('agents',true,!!event.detail);
 $('wifi-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await operation('wifi',{ssid:$('ssid').value,password:$('wifi-password').value});$('wifi-password').value='';show('agents');});};
 $('muse-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{muse:$('muse-token').value.trim()});$('muse-token').value='';await refresh();$('setup-message').textContent='Muse token saved. Choose Save and restart to apply it.';});};
 $('grok-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/agents',{grok:{webhook:$('grok-url').value.trim(),key:$('grok-key').value.trim()}});$('grok-key').value='';$('grok-url').value='';await refresh();$('setup-message').textContent='Grok Bot saved.';});};
@@ -201,13 +221,16 @@ async function setupAgent(kind,action){await run(async()=>{
 $('agent-cancel').onclick=()=>api('/api/setup/coding/cancel',{}).catch(e=>$('setup-error').textContent=e.message);
 $('pi-form').onsubmit=e=>{e.preventDefault();void run(async()=>{await api('/api/setup/coding/pi',{provider:$('pi-provider').value,key:$('pi-key').value.trim()});$('pi-key').value='';$('setup-message').textContent='Pi key saved. Start a new Pi session to use it.';await coding();});};
 async function coding(){try{
-  const data=await api('/api/setup/coding');const names={codex:'Codex',claude:'Claude Code',pi:'Pi'};let count=0;$('coding-agents').replaceChildren();
+  const data=await api('/api/setup/coding');const names={codex:'Codex',claude:'Claude Code',pi:'Pi'};let count=0,accounts=0;$('coding-agents').replaceChildren();
   for(const agent of data.agents){const row=document.createElement('li'),label=document.createElement('span');label.textContent=names[agent.kind]+': '+(!agent.installed?'Not installed':agent.signedIn?(agent.kind==='pi'?'Saved account':'Signed in'):'Sign in needed');row.append(label);if(agent.installed)count++;
-    if(!agent.installed||agent.kind!=='pi'){const b=document.createElement('button');b.className='secondary';b.textContent=agent.installed?'Sign in':'Install';b.disabled=busy;b.setAttribute('aria-label',(agent.installed?'Sign in to ':'Install ')+names[agent.kind]);b.onclick=()=>setupAgent(agent.kind,agent.installed?'login':'install');row.append(b);}
+    if(agent.installed&&agent.signedIn)accounts++;
+    if(!agent.installed||agent.kind!=='pi'){const b=document.createElement('button');b.className='secondary';b.textContent=agent.signedIn?'Sign in again':agent.installed?'Sign in':'Install';b.disabled=busy;b.setAttribute('aria-label',(agent.signedIn?'Sign in again to ':agent.installed?'Sign in to ':'Install ')+names[agent.kind]);b.onclick=()=>setupAgent(agent.kind,agent.installed?'login':'install');row.append(b);}
     $('coding-agents').append(row);
-  }$('coding-state').textContent=count+' installed';codingJob(data.job);
+  }$('coding-state').textContent=accounts?accounts+' set up':count?'Sign in needed':'Not installed';codingJob(data.job);
 }catch{$('coding-state').textContent='Could not check';}}
-show(location.hash.slice(1)||'device',false);
+const initialStep=location.hash.slice(1)||'device';
+show(initialStep==='remote-access'?'wifi':initialStep,false,false);
+if(initialStep==='remote-access'){$('remote-access').open=true;history.replaceState(null,'','#remote-access');$('remote-heading').focus({preventScroll:true});$('remote-access').scrollIntoView({block:'nearest'});}
 void run(async()=>{await refresh();if(state.job?.state==='working')$('setup-message').textContent='A device step is already running. Wait, then refresh to check it.';});
 void coding();
 setInterval(()=>{if(!busy&&!document.hidden)void refresh().catch(()=>{});},3000);

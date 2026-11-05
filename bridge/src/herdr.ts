@@ -63,7 +63,7 @@ export class Herdr {
     const ready = await Promise.all(this.config.agents.map(agentReadiness));
     const names = { codex: 'Codex', claude: 'Claude Code', pi: 'Pi' };
     const fresh: Target[] = this.config.projects.flatMap(p => this.config.agents.map(kind => ({
-      id: `new:${kind}:${p.id}`, name: `New ${names[kind]}${this.config.projects.length > 1 ? ' / ' + p.name : ''}`, provider: 'herdr', detail: '',
+      id: `new:${kind}:${p.id}`, name: `New ${names[kind]}${this.config.projects.length > 1 ? ' / ' + p.name : ''}`, provider: 'herdr', detail: p.name,
       status: !ready.find(a=>a.kind===kind)?.installed ? 'Install in Maestro' : !ready.find(a=>a.kind===kind)?.signedIn ? 'Sign in on Mac' : kind==='codex'&&!p.trusted ? 'Choose project in Maestro' : 'new',
       available: ready.some(a=>a.kind===kind&&a.installed&&a.signedIn) && (kind!=='codex'||p.trusted===true), kind, project: p.id, character: kind,
     })));

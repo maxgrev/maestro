@@ -1,6 +1,5 @@
-.dot-setup { max-width: 1140px; }
-.dot-setup .page-heading { align-items: center; margin-top: 24px; }
-.dot-setup .page-heading .companion { margin: -10px 0; }
+.utility-page .dot-setup { max-width: 900px; }
+.dot-setup .page-heading { align-items: center; }
 .dot-setup>section { padding: 32px; background: var(--surface); border-radius: 22px; margin-top: 28px; }
 .dot-setup>p, .dot-setup li p, .dot-setup section>p { color: var(--muted); font-size: 14px; line-height: 1.75; }
 .dot-setup #status:empty { display: none; }
@@ -11,7 +10,8 @@
 .dot-setup #consent .text-button { margin-left: 20px; }
 .dot-setup .field-row input { font-size: 12px; }
 .dot-setup #enable-form { max-width: 400px; }.dot-setup #enable { margin-top: 18px; }
+.dot-setup #enable-form>label:first-child { margin-top: 0; }
 .back-link { text-decoration: none; font-size: 12px; }.dot-setup .field-row { flex-wrap: wrap; }.dot-setup .field-row input { flex-basis: 240px; }
 .grok-guide #routine { font: 12px/1.8 ui-monospace, monospace; min-height: 300px; }
-.grok-guide #copy { margin-top: 14px; }.grok-guide #guide-status { margin: 14px 0 0; }
-@media (max-width: 700px) { .dot-setup>section { padding: 24px 20px; }.dot-setup .page-heading .companion { transform: scale(.7); margin-right: -12px; margin-left: -12px; }.dot-setup h1 { font-size: 27px; } }
+.guide-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; margin-top: 14px; }.grok-guide #guide-status { margin: 14px 0 0; min-height: 22px; }
+@media (max-width: 700px) { .dot-setup>section { padding: 24px 20px; }.dot-setup h1 { font-size: 27px; } }

@@ -92,11 +92,18 @@ final class MaestroApp: NSObject, NSApplicationDelegate, NSToolbarDelegate, WKNa
     @objc private func openConversations() { navigate(to: "?sidebar=open") }
     @objc private func openUnread() { navigate(to: "?filter=unread") }
     @objc private func openSetup() { navigate(to: "setup.html") }
-    @objc private func openSettings() { navigate(to: "setup.html#app-settings") }
+    @objc private func openSettings() { navigate(to: "settings.html") }
     @objc private func openCredits() { navigate(to: "characters/credits.html") }
     @objc private func toggleSidebar() {
         if web.url?.path == "/" { web.evaluateJavaScript("window.dispatchEvent(new Event('maestro:toggle-sidebar'))", completionHandler: nil) }
-        else { openConversations() }
+        else { navigate(to: utilityParent().path) }
+    }
+    private func utilityParent() -> (path: String, label: String) {
+        switch web.url?.path {
+        case "/dot-setup.html", "/grok-setup.html": return ("setup.html#agents", "Agents")
+        case "/characters/credits.html": return ("settings.html", "Settings")
+        default: return ("?sidebar=open", "Conversations")
+        }
     }
     @objc private func newConversation() {
         if web.url?.path == "/" { web.evaluateJavaScript("window.dispatchEvent(new Event('maestro:new-conversation'))", completionHandler: nil) }
@@ -125,9 +132,10 @@ final class MaestroApp: NSObject, NSApplicationDelegate, NSToolbarDelegate, WKNa
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         let conversation = webView.url?.path == "/"
-        sidebarItem?.image = NSImage(systemSymbolName: conversation ? "sidebar.left" : "chevron.left", accessibilityDescription: conversation ? "Toggle conversation sidebar" : "Back to conversations")
-        sidebarItem?.label = conversation ? "Sidebar" : "Conversations"
-        sidebarItem?.toolTip = conversation ? "Show or hide conversations (⌘B)" : "Back to conversations"
+        let parent = utilityParent().label
+        sidebarItem?.image = NSImage(systemSymbolName: conversation ? "sidebar.left" : "chevron.left", accessibilityDescription: conversation ? "Toggle conversation sidebar" : "Back to \(parent.lowercased())")
+        sidebarItem?.label = conversation ? "Sidebar" : parent
+        sidebarItem?.toolTip = conversation ? "Show or hide conversations (⌘B)" : "Back to \(parent.lowercased())"
     }
     private func navigate(to path: String) {
         showWindow()

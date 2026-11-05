@@ -22,6 +22,7 @@ async function api(path, options = {}) {
 }
 function post(path, body, options) { return api(path, { method: 'POST', body: JSON.stringify(body), ...options }); }
 function current() { return conversations.find(c => c.id === selected); }
+function newTarget(c) { return c.id.startsWith('new:') && !!c.target; }
 function draft(id) { if (drafts.has(id)) return drafts.get(id); try { return sessionStorage.getItem('maestro-draft:' + id) || ''; } catch { return ''; } }
 function saveDraft(id, text) { if (!id) return; drafts.set(id, text); try { if (text) sessionStorage.setItem('maestro-draft:' + id, text); else sessionStorage.removeItem('maestro-draft:' + id); } catch { /* The in-memory draft still survives a conversation switch. */ } }
 function url() {
@@ -55,7 +56,8 @@ function renderList() {
     const item = el('div'); item.setAttribute('role', 'listitem');
     const row = el('button', undefined, 'conversation-row' + (c.unread ? ' unread' : '')); row.type = 'button';
     row.dataset.conversation = c.id; row.setAttribute('aria-current', String(c.id === selected));
-    const character = el('span', undefined, 'companion ' + (c.character || 'pi')); character.setAttribute('aria-hidden', 'true');
+    const portrait = el('span', undefined, 'portrait'); portrait.setAttribute('aria-hidden', 'true');
+    portrait.append(el('span', undefined, 'companion ' + (c.character || 'pi')));
     const copy = el('span', undefined, 'conversation-copy'); copy.append(el('span', c.title, 'conversation-name'));
     if (c.title !== c.agent) copy.append(el('span', c.agent, 'conversation-agent'));
     copy.append(el('span', preview(c.preview) || (c.connection === 'ready' ? 'Send a message' : states[c.connection]), 'conversation-preview'));
@@ -63,13 +65,17 @@ function renderList() {
     if (c.updated) end.append(el('time', shortTime(c.updated)));
     if (c.unread) { const count = el('span', String(c.unread), 'unread-mark'); count.setAttribute('aria-label', c.unread + ' unread'); end.append(count); }
     if (c.connection === 'busy' || c.attention) end.append(el('span', c.connection === 'busy' ? 'Working' : 'Needs you', 'conversation-state'));
-    row.append(character, copy, end); row.onclick = () => choose(c.id, true); item.append(row); $('conversations').append(item);
+    row.append(portrait, copy, end); row.onclick = () => choose(c.id, true); item.append(row); $('conversations').append(item);
   }
   if (!visible.length) {
     const empty = el('div', undefined, 'empty-state');
     empty.append(el('h2', query ? 'No matching conversations' : unreadOnly ? 'No unread conversations' : 'No conversations yet'));
     if (query || unreadOnly) { const reset = el('button', 'Show all', 'text-button'); reset.onclick = () => { $('search').value = ''; setFilter(false); }; empty.append(reset); }
-    else { const start = el('button', 'New conversation', 'text-button'); start.onclick = openNew; empty.append(start); }
+    else if (conversations.some(newTarget)) {
+      const start = el('button', 'New conversation', 'text-button start-empty'); start.onclick = event => openNew(!!event.detail); empty.append(start);
+    } else {
+      const setup = el('a', 'Agent setup', 'text-button start-empty'); setup.href = '/setup.html#agents'; empty.append(setup);
+    }
     $('conversations').append(empty);
   }
   $('conversations').scrollTop = scroll;
@@ -78,8 +84,16 @@ function renderList() {
 function renderConnection() {
   const c = current(), busy = sending.has(selected) || followRequest?.conversation === selected, isConnecting = connecting.has(selected);
   $('no-selection').hidden = !!c;
+  $('no-selection-retry').hidden = true;
   for (const id of ['thread-header', 'history-scroll', 'reply-area']) $(id).hidden = !c;
-  if (!c) return;
+  if (!c) {
+    const existing = conversations.some(item => !item.id.startsWith('new:'));
+    const canStart = conversations.some(newTarget);
+    $('no-selection-title').textContent = existing ? 'Choose a conversation' : canStart ? 'Start a conversation' : 'Connect an agent';
+    $('no-selection-start').hidden = existing || !canStart;
+    $('no-selection-setup').hidden = existing || canStart;
+    return;
+  }
   $('thread-title').textContent = c.title;
   $('thread-meta').textContent = (c.title !== c.agent ? c.agent + ' · ' : '') + (c.id.startsWith('new:') && c.connection === 'ready' ? 'Ready to start' : states[c.connection]);
   $('thread-character').className = 'companion ' + (c.character || 'pi');
@@ -221,7 +235,7 @@ async function syncNative(cursor) {
   finally { if (ticket === epoch) { nativeBusy = false; $('older').disabled = false; $('older').hidden = !dbCursor && !nativeCursor; } }
 }
 async function refresh() {
-  if (listBusy) return; listBusy = true; $('refresh').disabled = true;
+  if (listBusy) return; listBusy = true; $('refresh').disabled = $('no-selection-retry').disabled = true;
   try {
     const value = await api('/api/conversations'); conversations = value.conversations;
     $('connection').textContent = 'Mac connected'; $('list-error').textContent = '';
@@ -244,9 +258,18 @@ async function refresh() {
     renderList(); renderConnection();
     if (params.has('new')) { params.delete('new'); openNew(); url(); }
     if (selected) await loadHistory();
-  } catch (error) { $('connection').textContent = 'Mac offline'; $('list-error').textContent = error.message; $('conversations').setAttribute('aria-busy', 'false'); }
-  finally { listBusy = false; $('refresh').disabled = false; }
+  } catch (error) {
+    $('connection').textContent = 'Mac offline'; $('list-error').textContent = error.message; $('conversations').setAttribute('aria-busy', 'false');
+    if (!selected && !conversations.length) {
+      $('conversations').replaceChildren(); listSignature = '';
+      $('no-selection-title').textContent = 'Could not load conversations';
+      $('no-selection-start').hidden = $('no-selection-setup').hidden = true;
+      $('no-selection-retry').hidden = false;
+    }
+  }
+  finally { listBusy = false; $('refresh').disabled = $('no-selection-retry').disabled = false; }
 }
+$('no-selection-retry').onclick = () => void refresh();
 $('composer').addEventListener('submit', async event => {
   event.preventDefault();
   const c = current(), raw = $('message').value, text = raw.trim();
@@ -285,22 +308,41 @@ $('connect-session').onclick = async () => {
   } catch (error) { if (selected === origin) $('error').textContent = error.message; }
   finally { connecting.delete(origin); renderConnection(); }
 };
-function openNew() {
+let dialogAnimation, dialogClosing = false;
+function closeNew(animate = false) {
+  const dialog = $('new-dialog');
+  if (!dialog.open) return;
+  const style = getComputedStyle(dialog), start = { opacity: style.opacity, transform: style.transform };
+  dialogAnimation?.cancel(); dialogClosing = true;
+  if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) { dialog.close(); dialogClosing = false; return; }
+  const current = dialog.animate([start, { opacity: .2, transform: 'scale(.985)' }], { duration: 120, easing: 'cubic-bezier(.23,1,.32,1)' });
+  dialogAnimation = current;
+  current.finished.then(() => { if (dialogAnimation === current) { dialog.close(); dialogClosing = false; dialogAnimation = undefined; } }).catch(() => {});
+}
+function openNew(animate = false) {
+  const dialog = $('new-dialog');
+  if (dialog.open && !dialogClosing) return;
+  const start = dialog.open ? { opacity: getComputedStyle(dialog).opacity, transform: getComputedStyle(dialog).transform } : { opacity: .6, transform: 'scale(.985)' };
+  dialogAnimation?.cancel(); dialogAnimation = undefined; dialogClosing = false;
   $('new-targets').replaceChildren();
-  const choices = conversations.filter(c => c.id.startsWith('new:') || !c.updated && ['dot', 'grok'].includes(c.id));
+  const choices = conversations.filter(c => newTarget(c) || c.target && !c.updated && ['dot', 'grok'].includes(c.id));
   for (const c of choices) {
-    const button = el('button', c.agent, 'new-target'); button.type = 'button';
+    const button = el('button', c.id.startsWith('new:') ? c.agent.replace(/^New /, '') : c.agent, 'new-target'); button.type = 'button';
     const project = c.title !== c.agent ? c.title : c.target?.project;
     if (project) button.append(el('span', project));
-    button.onclick = () => { $('new-dialog').close(); choose(c.id, true); $('message').focus(); };
+    button.onclick = () => { closeNew(); choose(c.id, true); $('message').focus(); };
     $('new-targets').append(button);
   }
   if (!choices.length) $('new-targets').append(el('p', 'Connect an agent and choose a project in Setup.'));
-  if (!$('new-dialog').open) $('new-dialog').showModal();
+  if (!dialog.open) dialog.showModal();
+  if (animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) dialogAnimation = dialog.animate([start, { opacity: 1, transform: 'scale(1)' }], { duration: 180, easing: 'cubic-bezier(.23,1,.32,1)' });
 }
-$('new-conversation').onclick = openNew;
-window.addEventListener('maestro:new-conversation', openNew);
-$('new-dialog').addEventListener('click', event => { if (event.target === $('new-dialog')) { const rect = event.target.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.target.close(); } });
+$('new-conversation').onclick = event => openNew(!!event.detail);
+$('no-selection-start').onclick = event => openNew(!!event.detail);
+$('close-new').onclick = event => closeNew(!!event.detail);
+window.addEventListener('maestro:new-conversation', () => openNew());
+$('new-dialog').addEventListener('cancel', event => { event.preventDefault(); closeNew(); });
+$('new-dialog').addEventListener('click', event => { if (event.target === $('new-dialog')) { const rect = event.target.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeNew(!!event.detail); } });
 $('older').onclick = () => { if (dbCursor) void loadHistory(true); else if (nativeCursor) void syncNative(nativeCursor); };
 $('back').onclick = () => { showSidebar(); ([...$('conversations').querySelectorAll('button')].find(row => row.dataset.conversation === selected) || $('search')).focus(); };
 $('filter-all').onclick = () => setFilter(false); $('filter-unread').onclick = () => setFilter(true);

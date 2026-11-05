@@ -1,3 +1,5 @@
+import '/disclosures.js';
+
 const appearance = document.getElementById('appearance');
 function syncNativeAppearance() {
   window.webkit?.messageHandlers?.appearance?.postMessage(document.documentElement.dataset.theme || 'system');
@@ -22,12 +24,11 @@ if (appearance) {
   });
 }
 syncNativeAppearance();
-const appSettings = document.getElementById('app-settings');
-if (appSettings && location.hash === '#app-settings') { appSettings.open = true; appSettings.scrollIntoView({ block: 'start' }); }
+if (location.pathname === '/setup.html' && location.hash === '#app-settings') location.replace('/settings.html');
 document.addEventListener('keydown', event => {
   if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
   if (event.key === '2' && document.body.classList.contains('conversations-page')) return;
-  const destination = { '1': '/?sidebar=open', '2': '/?filter=unread', '3': '/setup.html', ',': '/setup.html#app-settings' }[event.key];
+  const destination = { '1': '/?sidebar=open', '2': '/?filter=unread', '3': '/setup.html', ',': '/settings.html' }[event.key];
   if (destination) { event.preventDefault(); location.assign(destination); }
 });
 const connection = document.getElementById('connection');

@@ -8,7 +8,7 @@
   --success: #3d6340; --error: #a33c2e; --error-surface: #faeae3; --focus: #577a42;
   --sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --display: "Avenir Next", -apple-system, system-ui, sans-serif;
-  --sidebar-width: 204px; --curve: cubic-bezier(.22, .8, .24, 1);
+  --sidebar-width: 204px; --curve: cubic-bezier(.23, 1, .32, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -33,14 +33,15 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 var
 button, input, select, textarea { font: inherit; }
 button, a, summary, select { -webkit-tap-highlight-color: transparent; }
 button, .button-link {
+  -webkit-appearance: none; appearance: none;
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   min-height: 44px; padding: 11px 20px; border: 0; border-radius: 24px;
   background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 600;
   line-height: 1.4; text-decoration: none; white-space: nowrap; cursor: pointer;
-  transition: background-color 160ms var(--curve), color 160ms var(--curve), transform 160ms var(--curve);
+  transition: background-color 140ms var(--curve), color 140ms var(--curve), filter 100ms var(--curve);
 }
 button:hover, .button-link:hover { filter: brightness(.95); }
-button:active, .button-link:active { transform: scale(.98); }
+button:active, .button-link:active { filter: brightness(.9); transition-duration: 0ms; }
 button:disabled { cursor: default; opacity: .43; filter: none; transform: none; }
 .secondary { background: var(--surface-raised); color: var(--text); }
 .text-button { display: inline-flex; align-items: center; justify-content: center; background: transparent; color: var(--accent); padding: 8px 2px; min-height: 40px; font-weight: 600; text-decoration: none; }
@@ -104,7 +105,15 @@ select:not(#appearance) { appearance: none; -webkit-appearance: none; padding-ri
 .checkbox { display: flex; align-items: flex-start; gap: 10px; line-height: 1.6; font-weight: 400; }
 .checkbox input { width: 17px; height: 17px; margin: 3px 0 0; accent-color: var(--accent); flex-shrink: 0; }
 form>button { margin-top: 22px; }
-summary { cursor: pointer; }
+details { display: flow-root; }
+summary { display: flex; align-items: center; gap: 12px; min-height: 44px; list-style: none; cursor: pointer; border-radius: 8px; }
+summary::-webkit-details-marker { display: none; }
+summary::marker { content: ''; }
+summary::after { content: ''; flex: 0 0 24px; width: 24px; height: 24px; margin-left: auto; background: currentColor; opacity: .75; -webkit-mask: url('/chevron.svg') center / 12px 12px no-repeat; mask: url('/chevron.svg') center / 12px 12px no-repeat; transform: rotate(-90deg); transition: transform 160ms var(--curve), opacity 120ms var(--curve); }
+details[open]>summary::after { transform: rotate(0); }
+details[data-expanded="false"]>summary::after { transform: rotate(-90deg); }
+summary:active { opacity: .75; }
+summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 code, pre { font-family: ui-monospace, monospace; font-size: .9em; }
 .markdown { white-space: normal; overflow-wrap: anywhere; }
 .markdown p { white-space: normal; }
@@ -154,3 +163,16 @@ code, pre { font-family: ui-monospace, monospace; font-size: .9em; }
 .app-settings .appearance-row label { display: block; font-size: 14px; color: var(--text); }
 .app-settings .appearance-row select { max-width: 160px; min-height: 40px; padding: 8px 12px; font-size: 14px; background: var(--surface-raised); }
 .app-settings>a { display: inline-flex; align-items: center; min-height: 40px; font-size: 13px; }
+.utility-footer { margin-top: 32px; padding: 0 4px; }
+.utility-footer a { display: inline-flex; align-items: center; min-height: 40px; color: var(--muted); font-size: 13px; text-decoration: none; }
+.utility-footer a:hover { color: var(--text); }
+.utility-page .settings-main { max-width: 780px; }
+.settings-surface { background: var(--surface); padding: 12px 28px; border-radius: 20px; }
+.settings-row, .settings-link { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 76px; }
+.settings-row label { margin: 0; font-size: 14px; font-weight: 500; }
+.settings-row #appearance { appearance: none; -webkit-appearance: none; width: 160px; min-height: 42px; border-radius: 10px; padding: 10px 36px 10px 12px; font-size: 14px; color: var(--text); background: var(--surface-raised) url('/chevron.svg') right 12px center / 12px no-repeat; border: 0; }
+.settings-link { color: var(--text); font-size: 14px; text-decoration: none; }
+.settings-link:hover { color: var(--accent); }
+.direction-icon { width: 20px; height: 20px; flex-shrink: 0; }
+.copy-button { min-width: 90px; }
+@media (max-width: 480px) { .settings-surface { padding: 6px 20px; }.settings-row, .settings-link { gap: 16px; }.settings-row #appearance { width: 136px; } }

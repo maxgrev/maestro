@@ -86,9 +86,9 @@ export class Conversations {
   }
 }
 
-// Claude's transcript includes synthetic user messages for task completions and
-// compaction. Keep the ensuing answers, without presenting that metadata as a prompt.
+// Claude's transcript includes synthetic user messages for task completions,
+// agent handoffs, and compaction. Keep the answers without showing that metadata.
 export function historyPrompt(text: string) {
   const clean = text.replace(/^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*)+/,'').trim();
-  return /^(?:<task-notification>|This session is being continued from a previous conversation that ran out of context\.)/.test(clean) ? '' : clean;
+  return /^(?:<task-notification>|<agent-message\b[^>]*>\s*\[Subagent hand-back\]|This session is being continued from a previous conversation that ran out of context\.)/.test(clean) ? '' : clean;
 }
