@@ -36,6 +36,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn("scripts/helper.py", files)
             self.assertIn(".github/workflow.yml", files)
             self.assertIn("LICENSE", files)
+            self.assertIn("NOTICE", files)
             self.assertIn("bridge/public/characters/codex.webp", files)
             self.assertIn("firmware/src/avatars/codex.h", files)
             self.assertFalse(any("must not be exported" in (root / name).read_text() for name in files))

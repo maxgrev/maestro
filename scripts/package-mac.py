@@ -102,7 +102,8 @@ def main():
     for name in ["maestro-manifest.json", *[f["file"] for f in manifest["files"]]]:
         path = RES / "firmware" / name; path.parent.mkdir(exist_ok=True, parents=True); shutil.copy2(build / name, path)
     notices = RES / "Notices"; notices.mkdir()
-    shutil.copy2(ROOT / "LICENSE", notices / "Maestro-MIT.txt")
+    shutil.copy2(ROOT / "LICENSE", notices / "Maestro-GPL-3.0.txt")
+    shutil.copy2(ROOT / "NOTICE", notices / "Maestro-NOTICE.txt")
     shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", notices / "THIRD_PARTY_NOTICES.md")
     shutil.copy2(ROOT / ".cache/muse-gadget-sdk/LICENSE", notices / "Muse-SDK.txt")
     shutil.copy2(ROOT / ".cache/whisper.cpp/LICENSE", notices / "whisper.txt")
@@ -122,7 +123,7 @@ def main():
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, target)
     run(sys.executable, "scripts/fetch-licenses.py")
-    (notices / "README.txt").write_text("Maestro's own source: MIT. The existing Codex companion and native Muse artwork retain their own rights; confirm redistribution terms before publishing. See THIRD_PARTY_NOTICES.md and Character-sources.md for dependencies and art. Speech tools retain their GPL/LGPL terms; SOURCES.txt explains how to rebuild or replace them. Publish the matching Maestro source and third-party source archives beside this app. Node, Python, JavaScript and Python packages retain their own license files. Source: https://github.com/maxgrev/maestro\n")
+    (notices / "README.txt").write_text("Maestro's own source: GPL-3.0-only. See Maestro-NOTICE.txt for copyright and license notices and Maestro-GPL-3.0.txt for the license. The existing Codex companion and native Muse artwork retain their own rights; confirm redistribution terms before publishing. See THIRD_PARTY_NOTICES.md and Character-sources.md for dependencies and art. Speech tools retain their GPL/LGPL terms; SOURCES.txt explains how to rebuild or replace them. Publish the matching Maestro source and third-party source archives beside this app. Node, Python, JavaScript and Python packages retain their own license files. Source: https://github.com/maxgrev/maestro\n")
     info = {"CFBundleIdentifier": "dev.maestro.stopwatch", "CFBundleName": "Maestro", "CFBundleExecutable": "Maestro", "CFBundleIconFile": "AppIcon", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": version, "CFBundleVersion": version, "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True, "NSLocalNetworkUsageDescription": "Maestro connects your StopWatch to agents on this Mac.", "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True}}
     info.update(plistlib.loads((ROOT / ".cache/app-icon/Info.plist").read_bytes()))
     (APP / "Contents/Info.plist").write_bytes(plistlib.dumps(info))

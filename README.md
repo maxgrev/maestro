@@ -210,7 +210,12 @@ battery checks, and live Pi account acceptance still need physical testing.
 
 ## License
 
-Maestro's original code uses the [MIT license](LICENSE).
+Maestro's original code is copyright © 2026 Max Grev and Maestro contributors
+and uses [GPLv3](LICENSE) (`GPL-3.0-only`). Commercial use and sales are
+allowed. Redistributors must preserve copyright and license notices,
+identify modifications, and provide corresponding source as GPLv3 requires.
+See [NOTICE](NOTICE) for the copyright and license notice.
+
 [Third-party notices](THIRD_PARTY_NOTICES.md) cover dependencies and artwork.
 The existing Codex companion and native Muse artwork retain their own rights;
 confirm their redistribution terms before publishing source or binaries.

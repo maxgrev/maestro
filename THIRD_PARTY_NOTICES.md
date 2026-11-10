@@ -1,6 +1,7 @@
 # Third-party notices
 
-Maestro's original source uses the [MIT license](LICENSE).
+Maestro's original source uses [GPLv3](LICENSE) (`GPL-3.0-only`).
+Its copyright and license notice is in [NOTICE](NOTICE).
 Third-party code, models, and marks keep their own terms. Maestro does not
 grant access to a provider account or permission to use a provider's marks
 as your own brand.
@@ -20,7 +21,7 @@ as your own brand.
 | LAME | 3.100, built from checksum-pinned source | [LGPL-2.0-or-later](https://lame.sourceforge.io/license.txt). Matching source and build instructions accompany the Mac package. |
 | ONNX Runtime | 1.31.0 | MIT; its license and ThirdPartyNotices.txt remain in the Python runtime. |
 | Node.js and Python | pinned by `scripts/package-mac.py` | License texts remain in their runtime distributions. |
-| JavaScript dependencies | `package-lock.json` | Each package retains its license/README in `node_modules`. The Claude Agent SDK uses Anthropic's stated terms; it is not relicensed under Maestro's MIT license. |
+| JavaScript dependencies | `package-lock.json` | Each package retains its license/README in `node_modules`. The Claude Agent SDK uses Anthropic's stated terms; Maestro does not relicense it. |
 | Python dependencies | `desktop/requirements-*.txt` | Each package retains its metadata and license files. |
 | MD4C | vendored | [MIT](firmware/src/vendor/md4c/LICENSE.md). |
 | Pixel font | SDK's Adafruit-derived bitmap font | [BSD-2-Clause](docs/licenses/Pixel-font.txt). |
@@ -28,7 +29,7 @@ as your own brand.
 
 See [character sources](firmware/src/avatars/SOURCES.md) for the artwork.
 The original Codex companion and native Muse artwork remain in use. Their
-public redistribution rights still need verification; Maestro's MIT license
+public redistribution rights still need verification; Maestro's code license
 does not grant rights to those assets.
 
 `scripts/package-mac.py` collects notices in the app's

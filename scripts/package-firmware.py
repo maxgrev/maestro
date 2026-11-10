@@ -21,6 +21,7 @@ def main():
         for name in ["maestro-manifest.json", "sdkconfig", "flasher_args.json", *[item["file"] for item in manifest["files"]]]:
             out.write(build / name, name)
         out.write(ROOT / "LICENSE", "LICENSE")
+        out.write(ROOT / "NOTICE", "NOTICE")
         out.write(ROOT / "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md")
         for name in ["firmware/src/vendor/md4c/LICENSE.md", "firmware/src/avatars/Clawd-LICENSE.txt", "docs/licenses/Pixel-font.txt"]:
             out.write(ROOT / name, "Notices/" + name)

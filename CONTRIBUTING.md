@@ -28,5 +28,6 @@ and any physical-device checks you could not run. Use your own provider
 accounts; never include configuration, transcripts, recovery images, or keys
 in an issue, test fixture, or pull request.
 
-Contributions use the project's MIT license. Third-party files retain their
-own licenses. See [third-party notices](THIRD_PARTY_NOTICES.md).
+Contributions use the project's GPLv3 license (`GPL-3.0-only`). Preserve
+copyright and license notices, including [NOTICE](NOTICE). Third-party files
+retain their own terms. See [third-party notices](THIRD_PARTY_NOTICES.md).

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PATHS = (
     "bridge", "desktop", "docs", "firmware/src", "scripts", ".github",
     "firmware/dependencies.lock", "firmware/sdkconfig.maestro", ".gitignore", ".gitleaksignore",
-    "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "CONTRIBUTING.md", "SECURITY.md",
+    "README.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "CONTRIBUTING.md", "SECURITY.md",
     "package.json", "package-lock.json", "tsconfig.json",
 )
 EXCLUDED = {"__pycache__", ".DS_Store"}

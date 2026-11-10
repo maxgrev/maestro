@@ -53,6 +53,11 @@ source archive, and `SHA256SUMS` together under the same version tag. The Mac
 package reads its version from `package.json`. Rebuild archives and checksums
 after any source, dependency, or signing change.
 
+Keep Maestro's `LICENSE` and `NOTICE` in source and firmware exports and the
+Mac app's Notices directory. Distributions must preserve copyright and
+license notices and meet GPLv3's corresponding-source requirements. Third-party
+components and artwork retain their own terms.
+
 ## Publish source safely
 
 The source exporter preserves the current source and artwork, with no Git
