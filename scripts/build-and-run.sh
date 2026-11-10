@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
+# Refresh and launch the native Mac app with the existing local build tools.
 set -euo pipefail
 
 MODE="${1:-run}"
-case "$MODE" in run|--verify|--debug|--logs|--telemetry) ;; *) echo "Usage: $0 [--verify|--debug|--logs|--telemetry]" >&2; exit 2 ;; esac
+case "$MODE" in
+  -h|--help) echo "Usage: $0 [--verify|--debug|--logs|--telemetry]"; exit 0 ;;
+  run|--verify|--debug|--logs|--telemetry) ;;
+  *) echo "Usage: $0 [--verify|--debug|--logs|--telemetry]" >&2; exit 2 ;;
+esac
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$ROOT_DIR/dist/Maestro.app"
 RESOURCES="$APP_BUNDLE/Contents/Resources"

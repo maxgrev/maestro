@@ -2,6 +2,8 @@
 .cache/
 .tools/
 .local/
+/.codex/
+/.claude/
 .env
 .env.*
 !.env.example

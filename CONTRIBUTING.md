@@ -28,6 +28,36 @@ and any physical-device checks you could not run. Use your own provider
 accounts; never include configuration, transcripts, recovery images, or keys
 in an issue, test fixture, or pull request.
 
+## Run the Mac app
+
+After bootstrap, use macOS 26 or later with Xcode 26 or later to build and
+open the native app:
+
+```sh
+npm run app:run
+```
+
+This stops a running Maestro app, refreshes its code and UI, and opens it
+again. It reuses the bundled runtimes and compiler cache when available.
+Use `npm run app:run -- --debug` for LLDB or `--logs` for live app logs.
+
+## Repository layout
+
+| Directory | Contents |
+| --- | --- |
+| `bridge/` | TypeScript bridge, local web interface, and bridge tests. |
+| `desktop/` | Native Swift app, app icon, entitlements, and Python requirements. |
+| `firmware/` | StopWatch code, pinned component versions, and board configuration. |
+| `scripts/` | Setup, build, device, packaging, and release tools, plus Python/C tests. |
+| `docs/` | Architecture, provider guides, images, and release instructions. |
+| `.github/` | CI workflows. |
+
+Private configuration stays in `.local/`. Downloaded tools, build caches,
+and packaged apps stay in `.tools/`, `.cache/`, and `dist/`. These folders
+and local Codex/Claude settings are ignored by Git.
+
+## License
+
 Contributions use the project's GPLv3 license (`GPL-3.0-only`). Preserve
 copyright and license notices, including [NOTICE](NOTICE). Third-party files
 retain their own terms. See [third-party notices](THIRD_PARTY_NOTICES.md).
