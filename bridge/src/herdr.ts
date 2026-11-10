@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { basename, dirname, delimiter, isAbsolute } from 'node:path';
 import { stat } from 'node:fs/promises';
-import { captureReply } from './agent-reply.js';
+import { captureReply, nativeSession } from './agent-reply.js';
 import type { Config } from './config.js';
 import { UserError, type Target } from './types.js';
 import { agentBinary, agentReadiness, connectAgent } from './agent-setup.js';
@@ -56,10 +56,20 @@ export class Herdr {
       sessionPath: a.agent === 'pi' ? native : undefined,
       character: ['codex', 'claude', 'pi'].includes(a.agent ?? '') ? a.agent as Target['character'] : undefined };
   }
+  private async connectedTarget(agent: Agent): Promise<Target> {
+    const target = this.target(agent);
+    if (agent.agent === 'codex' && !target.session) {
+      // Codex can resume without a SessionStart report. Use the same exact-pane
+      // file ownership check as reply capture, without changing Herdr identity.
+      const session = await nativeSession(agent,this.call).catch(() => undefined);
+      if (session) target.session = `codex:${session}`;
+    }
+    return target;
+  }
   async targets(): Promise<Target[]> {
     const result = await this.call(['agent', 'list']);
     if (!Array.isArray(result.agents)) throw new Error('Herdr agent list has an unsupported shape.');
-    const existing = result.agents.filter(a => a.agent).map(a => this.target(a));
+    const existing = await Promise.all(result.agents.filter(a => a.agent).map(a => this.connectedTarget(a)));
     const ready = await Promise.all(this.config.agents.map(agentReadiness));
     const names = { codex: 'Codex', claude: 'Claude Code', pi: 'Pi' };
     const fresh: Target[] = this.config.projects.flatMap(p => this.config.agents.map(kind => ({
@@ -72,7 +82,7 @@ export class Herdr {
   async sessions() {
     const result = await this.call(['agent', 'list']);
     if (!Array.isArray(result.agents)) throw new Error('Herdr agent list has an unsupported shape.');
-    return result.agents.filter(a => a.agent).map(agent => ({ agent, target: this.target(agent) }));
+    return Promise.all(result.agents.filter(a => a.agent).map(async agent => ({ agent, target: await this.connectedTarget(agent) })));
   }
   async resume(saved: InboxTarget): Promise<Target> {
     const [kind,id] = (saved.session ?? '').split(':');
@@ -89,14 +99,29 @@ export class Herdr {
     const created = await this.call(['workspace','create','--cwd',saved.cwd,'--label',saved.detail || saved.name,
       '--env',`PATH=${[dirname(binary),process.env.PATH ?? ''].join(delimiter)}`,'--no-focus']);
     if (!created.root_pane?.pane_id) throw new Error('The session did not open.');
-    const args = kind === 'codex' ? ['resume',id] : kind === 'claude' ? ['--resume',id] : ['--session',saved.sessionPath!];
-    let agent = (await this.call(['agent','start',`m-${kind}-${Date.now()}`,'--kind',kind!,'--pane',created.root_pane.pane_id,'--',...args],45_000)).agent;
+    // Match new sessions: the app's Codex binary can differ from the shared daemon.
+    const args = kind === 'codex' ? ['--no-daemon','resume',id] : kind === 'claude' ? ['--resume',id] : ['--session',saved.sessionPath!];
+    let agent: Agent | undefined;
+    try {
+      agent = (await this.call(['agent','start',`m-${kind}-${Date.now()}`,'--kind',kind!,'--pane',created.root_pane.pane_id,'--',...args],45_000)).agent;
+    } catch {
+      throw new UserError(`${saved.name} did not become ready. Check its session on your Mac for a startup error or approval, then connect again.`,503);
+    }
     for (let attempt=0; agent && !agent.agent_session && attempt<10; attempt++) {
       await new Promise(resolve => setTimeout(resolve,200));
       agent = (await this.call(['agent','get',created.root_pane.pane_id])).agent;
     }
-    if (!agent || this.target(agent).session !== saved.session) throw new UserError('The session could not be verified. Check it on your Mac before replying.',409);
-    return this.target(agent);
+    const target = agent ? await this.connectedTarget(agent) : undefined;
+    if (!target || target.session !== saved.session) {
+      if (kind === 'codex' && agent && !agent.agent_session) {
+        const read: Result = await this.call(['agent','read',agent.pane_id,'--source','detection','--lines','16']).catch(() => ({ text: '' }));
+        if (/This conversation is open in another app/.test(read.text ?? read.read?.text ?? '')) {
+          throw new UserError('This session is open in another Codex app. Close the session there, then connect again in Maestro.',409);
+        }
+      }
+      throw new UserError('The session could not be verified. Check it on your Mac before replying.',409);
+    }
+    return target;
   }
   async prepare(target: Target, requestId: string): Promise<Target> {
     if (target.kind) {
@@ -126,7 +151,7 @@ export class Herdr {
         agent = (await this.call(['agent', 'get', agent.pane_id])).agent ?? agent;
       }
       if (target.kind === 'codex' && !agent.agent_session) this.newCodexSessions.add(agent.terminal_id);
-      return this.target(agent);
+      return this.connectedTarget(agent);
     }
     await this.validate(target);
     return target;
@@ -135,6 +160,7 @@ export class Herdr {
     if (!target.pane) throw new UserError('No agent session selected.');
     const result = await this.call(['agent', 'get', target.pane]);
     if (!result.agent || identity(result.agent) !== target.identity) throw new UserError('The selected session changed. Select it again.', 409);
+    if (target.session && (await this.connectedTarget(result.agent)).session !== target.session) throw new UserError('The selected session changed. Select it again.', 409);
     if (!['idle', 'done'].includes(result.agent.agent_status)) throw new UserError('The agent is busy or needs your attention. Open its app.', 409);
     return result.agent;
   }
@@ -157,7 +183,7 @@ export class Herdr {
       if (attempt) await new Promise(r => setTimeout(r, 400 * 2 ** (attempt - 1)));
       clean = await reader(text, started).catch(() => undefined);
     }
-    return { state: blocked || !clean ? 'needs_attention' : 'done', output, target: this.target(result.agent), sourceKey: reader.sourceKey,
+    return { state: blocked || !clean ? 'needs_attention' : 'done', output, target: await this.connectedTarget(result.agent), sourceKey: reader.sourceKey,
       reply: blocked ? `${target.name} needs your attention. Open the agent on your Mac.` : clean ?? 'The agent finished, but its answer could not be read. Open Maestro to check its output. Your request was not sent again.' };
   }
 }

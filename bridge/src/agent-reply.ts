@@ -46,7 +46,7 @@ export function piMessages(entries: PiEntry[]): ReplyMessage[] {
   return chain.filter(e => e.type === 'message' && e.message).map(e => ({ id: e.id, role: e.message!.role ?? '', message: e.message! }));
 }
 
-async function nativeSession(agent: Agent, call: HerdrCall): Promise<string> {
+export async function nativeSession(agent: Agent, call: HerdrCall): Promise<string> {
   const session = agent.agent_session;
   if (session && typeof session === 'object' && 'value' in session && typeof session.value === 'string') return session.value;
   // Sessions opened before Herdr's hook was installed still own their exact
