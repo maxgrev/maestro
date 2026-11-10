@@ -1,8 +1,66 @@
-# Maestro
+<p align="center">
+  <img src="desktop/assets/AppIcon.png" width="112" height="112" alt="Maestro app icon">
+</p>
 
-A voice remote for the M5Stack StopWatch C152, powered by an Apple Silicon Mac.
-Choose an agent, hold yellow to talk, then release to send. Hear the reply or
-read it on the watch. Replies stay in a shared Mac and watch inbox.
+<h1 align="center">Maestro</h1>
+
+<p align="center">Talk to your agents from your StopWatch.</p>
+
+<p align="center">M5Stack StopWatch C152 · Apple Silicon Mac</p>
+
+<p align="center">
+  <a href="#build-from-source">Get started</a> ·
+  <a href="#see-it-in-action">Demos</a> ·
+  <a href="#on-your-mac">Screenshots</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
+
+Choose Codex, Claude Code, Pi, Grok Bot, Dot, or Muse. Hold the yellow button
+to talk, then release to send. Hear the reply or read it on the watch.
+Replies stay in a shared Mac and watch inbox.
+
+## See it in action
+
+<p align="center">
+  <a href="https://x.com/max_grev/status/2109088460082684310"><img src="docs/images/demo-overview.jpg" width="74%" alt="Watch the 33-second introduction: Maestro running on a StopWatch in the grass, with Dot on its round display."></a>
+  <a href="https://x.com/max_grev/status/2109427651027083373"><img src="docs/images/demo-agents.jpg" width="23.4%" alt="Watch the 36-second agent demo: a handheld StopWatch showing a Grok Bot reply."></a>
+</p>
+
+<p align="center">
+  <a href="https://x.com/max_grev/status/2109088460082684310">Watch the introduction · 33 seconds</a>
+  &nbsp; · &nbsp;
+  <a href="https://x.com/max_grev/status/2109427651027083373">Watch the agent demo · 36 seconds</a>
+</p>
+
+## On your Mac
+
+Read saved replies, follow unread conversations, and continue supported agent
+sessions from the same app.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mac-conversations-dark.jpg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/mac-conversations-light.jpg">
+  <img src="docs/images/mac-conversations-light.jpg" alt="Maestro conversations: six agents in the sidebar, a Codex reply, unread badges, and a reply box." width="1200">
+</picture>
+
+Connect the StopWatch, join Wi-Fi, and set up the agents you use.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mac-setup-dark.jpg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/mac-setup-light.jpg">
+  <img src="docs/images/mac-setup-light.jpg" alt="Maestro setup: a StopWatch preview beside connection controls for Dot, Muse, Grok Bot, Codex, Claude Code, Pi, and local speech." width="1200">
+</picture>
+
+*Screenshots use sample conversations and connection states.*
+
+## How it works
+
+![The StopWatch sends voice over Wi-Fi or Tailscale to Maestro on your Mac. The Mac handles local speech and history, and connects to Codex, Claude Code, Pi, Grok Bot, and Dot. Muse uses its native connection on the watch.](docs/images/how-it-works.svg)
+
+The Mac runs Whisper for transcription and Kokoro for reply speech. Your
+chosen agent receives the message through its own connection and account.
+Muse uses the watch's native SDK connection and its agent's voice.
 
 Maestro is experimental. It needs an Apple Silicon Mac running macOS 14 or
 later, a StopWatch C152, a USB data cable, and 2.4 GHz Wi-Fi. The Mac handles
@@ -76,6 +134,8 @@ some local sessions started elsewhere can also contribute replies to the
 [inbox](docs/inbox.md).
 
 ## Controls and voice
+
+![StopWatch button guide: hold yellow to talk and release to send; press blue to open agents and hold it for settings; use touch to select, swipe, and scroll.](docs/images/controls.svg)
 
 Yellow records while held, confirms menu choices, and pages up in a reply.
 Blue opens the agent list, moves down through menus and replies, and opens

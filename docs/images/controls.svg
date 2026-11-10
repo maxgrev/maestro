@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="380" viewBox="0 0 1200 380" role="img" aria-labelledby="title desc">
+  <title id="title">StopWatch controls</title>
+  <desc id="desc">Hold the yellow button to record, then release to send. Press blue to open agents, and hold it for settings. Touch the screen to select, swipe, and scroll. The watch drawing is a schematic.</desc>
+  <rect width="1200" height="380" rx="20" fill="#f1f3ec"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <path d="M300 133H398l116-64" fill="none" stroke="#bba04b" stroke-width="2"/>
+    <path d="M900 133H802L686 69" fill="none" stroke="#6d93b4" stroke-width="2"/>
+    <g transform="translate(600 177)">
+      <rect x="-101" y="-127" width="28" height="34" rx="6" transform="rotate(-42 -87 -110)" fill="#e8c75f"/>
+      <rect x="73" y="-127" width="28" height="34" rx="6" transform="rotate(42 87 -110)" fill="#79a5ce"/>
+      <circle r="129" fill="#344035"/><circle r="120" fill="#151a16" stroke="#52604c" stroke-width="1"/>
+      <text y="-64" text-anchor="middle" fill="#b89cf2" font-size="17" letter-spacing="3">READY</text>
+      <path d="M-54 26V-5l23 24L0-35l31 54L54-5v31" fill="none" stroke="#d0e3bc" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <text y="82" text-anchor="middle" fill="#b0b9a8" font-size="16">Hold yellow to talk</text>
+    </g>
+    <g fill="#252c25">
+      <text x="60" y="115" font-size="29" font-weight="600">Yellow</text>
+      <text x="60" y="157" font-size="22">Hold to talk.</text>
+      <text x="60" y="190" font-size="22">Release to send.</text>
+      <text x="60" y="238" font-size="18" fill="#60695d">Press to choose a menu item.</text>
+      <text x="865" y="115" font-size="29" font-weight="600">Blue</text>
+      <text x="865" y="157" font-size="22">Press to open agents.</text>
+      <text x="865" y="190" font-size="22">Hold for settings.</text>
+      <text x="865" y="238" font-size="18" fill="#60695d">Hold in a menu to go back.</text>
+      <text x="600" y="350" text-anchor="middle" font-size="21">Touch to select, swipe, and scroll.</text>
+    </g>
+  </g>
+</svg>
