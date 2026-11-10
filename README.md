@@ -102,6 +102,21 @@ ID signing and notarization; see [release instructions](docs/releasing.md).
 The app bundles its runtimes, speech models, and generic firmware, so its
 users do not need Homebrew or a terminal.
 
+Local builds leave out the large release ZIP. To create it too, use
+`npm run app:build -- --archive`.
+
+### Reclaim build space
+
+After building, preview removable files with `npm run storage:clean`, then
+run `npm run storage:clean -- --apply` to remove them. This removes firmware
+compilers, downloaded build dependencies, intermediate files, and the Mac
+release ZIP. It keeps the app, source dependencies, speech tools and models,
+verified firmware images, license notices, and private data.
+
+To rebuild firmware after cleanup, run
+`bash scripts/bootstrap.sh --firmware-only`. Restoring the tools needs an
+internet connection. Normal app use and USB installation need no compiler.
+
 ## Set up the StopWatch
 
 1. Connect USB. Choose the device, confirm it is an M5Stack StopWatch, and

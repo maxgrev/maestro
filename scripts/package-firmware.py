@@ -30,6 +30,13 @@ def main():
             for path in sorted(directory.rglob("*")):
                 if path.is_file() and path.name.upper().startswith(("LICENSE", "COPYING", "NOTICE")) and ".git" not in path.parts:
                     out.write(path, str(Path("Notices") / label / path.relative_to(directory)))
+        # Cleanup keeps these notices beside the verified images, allowing
+        # firmware exports without downloading the compiler SDK again.
+        included = set(out.namelist())
+        for path in sorted((build / "Notices").rglob("*")):
+            name = str(path.relative_to(build))
+            if path.is_file() and name not in included:
+                out.write(path, name)
     print(f"Packaged StopWatch firmware: {archive}")
 
 

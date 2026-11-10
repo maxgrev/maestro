@@ -16,6 +16,7 @@
     "firmware:prepare": "python3 scripts/prepare-firmware.py",
     "firmware:build": "bash scripts/build-firmware.sh",
     "app:build": "python3.13 scripts/package-mac.py",
+    "storage:clean": "python3.13 scripts/clean-builds.py",
     "release:source": "python3.13 scripts/package-source.py"
   },
   "dependencies": {

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build a self-contained Apple Silicon app from pinned tools; include no user data."""
+import argparse
 import hashlib
 import json
 import os
@@ -59,6 +60,9 @@ def build_lame():
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--archive", action="store_true", help="also create the Mac release ZIP and source archive")
+    args = parser.parse_args()
     if os.uname().machine != "arm64" or os.uname().sysname != "Darwin":
         raise SystemExit("This package targets Apple Silicon Macs.")
     run("bash", "scripts/build-app-icon.sh")
@@ -78,8 +82,8 @@ def main():
         with tarfile.open(archive) as tar: tar.extractall(tools, filter="data")
         if unpacked != folder: (tools / unpacked).rename(tools / folder)
     # Keep pip and runtime wheels local to the bundle. No user Python needed.
-    run(str(tools / "python/bin/python3"), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(ROOT / "desktop/requirements-usb.txt"))
-    run(str(tools / "python/bin/python3"), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(ROOT / "desktop/requirements-speech.txt"))
+    run(str(tools / "python/bin/python3"), "-m", "pip", "install", "--no-compile", "--disable-pip-version-check", "-r", str(ROOT / "desktop/requirements-usb.txt"))
+    run(str(tools / "python/bin/python3"), "-m", "pip", "install", "--no-compile", "--disable-pip-version-check", "-r", str(ROOT / "desktop/requirements-speech.txt"))
     shutil.copy2(ROOT / ".tools/herdr", tools / "herdr")
     copytree(ROOT / ".tools/whisper", tools / "whisper")
     copytree(ROOT / ".tools/kokoro", tools / "kokoro")
@@ -124,11 +128,13 @@ def main():
     (APP / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
     run("swiftc", "-parse-as-library", "-target", "arm64-apple-macos14.0", "-module-cache-path", str(ROOT / ".cache/swift"), "-O", "-framework", "AppKit", "-framework", "WebKit", str(ROOT / "desktop/Maestro.swift"), "-o", str(APP / "Contents/MacOS/Maestro"))
     # Local development signature. A public release needs Developer ID + notarization.
+    run(sys.executable, "scripts/prepare-mac-signing.py", str(APP))
     run("codesign", "--force", "--deep", "--sign", "-", str(APP))
     run("codesign", "--verify", "--deep", "--strict", str(APP))
     run("touch", str(APP))
-    run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(APP), str(ROOT / "dist/Maestro-apple-silicon.zip"))
-    run(sys.executable, "scripts/package-source.py")
+    if args.archive:
+        run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(APP), str(ROOT / "dist/Maestro-apple-silicon.zip"))
+        run(sys.executable, "scripts/package-source.py")
     print("Built " + str(APP))
 
 

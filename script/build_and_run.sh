@@ -28,6 +28,7 @@ else
   node_modules/.bin/tsc --noEmit false --rootDir bridge --outDir "$RESOURCES/bridge"
   rm -rf "$RESOURCES/bridge/test"
   swiftc -parse-as-library -target arm64-apple-macos14.0 -module-cache-path "$ROOT_DIR/.cache/swift" -O -framework AppKit -framework WebKit desktop/Maestro.swift -o "$APP_BUNDLE/Contents/MacOS/Maestro"
+  python3.13 scripts/prepare-mac-signing.py "$APP_BUNDLE"
   codesign --force --deep --sign - "$APP_BUNDLE"
   codesign --verify --deep --strict "$APP_BUNDLE"
 fi

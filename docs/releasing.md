@@ -13,7 +13,7 @@ npm run check
 npm test
 .tools/python/bin/python -m unittest discover -s scripts/tests -v
 python3.13 scripts/package-firmware.py
-npm run app:build
+npm run app:build -- --archive
 python3.13 scripts/smoke-mac.py
 npm run release:source
 ```
@@ -23,6 +23,10 @@ bridge, USB imports, and actual speech without signing in or flashing a
 device. CI runs these checks on hosted Linux and Apple Silicon runners and
 saves the artifacts for review. CI artifacts use an ad hoc signature for
 testing; they are not notarized downloads.
+
+All signing paths remove disposable Python bytecode before sealing the app.
+The app disables bytecode writes at runtime, so deleting Python caches later
+does not invalidate the signature.
 
 Before calling a release tested on hardware, install it on a fresh StopWatch
 from a second Mac with the public instructions. Try Wi-Fi, a voice round trip,

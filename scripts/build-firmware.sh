@@ -4,8 +4,8 @@ cd "$(dirname "$0")/.."
 MAESTRO_ROOT="$PWD"
 export IDF_TOOLS_PATH="$MAESTRO_ROOT/.tools/espressif"
 export PATH="$MAESTRO_ROOT/.tools/python/bin:$PATH"
-if [[ ! -f .cache/esp-idf/export.sh ]]; then
-  echo 'Firmware tools are missing. Run bash scripts/bootstrap.sh first.' >&2
+if [[ ! -f .cache/esp-idf/export.sh || ! -d .tools/espressif/tools ]]; then
+  echo 'Firmware tools are missing. Run bash scripts/bootstrap.sh --firmware-only to restore them and build firmware.' >&2
   exit 1
 fi
 python3 scripts/prepare-firmware.py

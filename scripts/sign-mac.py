@@ -24,6 +24,7 @@ def main():
         parser.error("Use a Developer ID Application identity for a public download.")
     if not APP.is_dir():
         parser.error("Build the app with npm run app:build first.")
+    run(sys.executable, "scripts/prepare-mac-signing.py", str(APP))
     for path in sorted(APP.rglob("*"), key=lambda p: len(p.parts), reverse=True):
         if path.is_symlink() or not path.is_file():
             continue
